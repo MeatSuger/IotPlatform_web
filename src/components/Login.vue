@@ -1,18 +1,17 @@
 <template>
 
-
         <h2 class="title">欢迎登录</h2>
         <var-form>
                 <var-space direction="column" size="large">
-                        <var-input v-model="loginData.account" placeholder="请输入用户名" clearable
-                                :rules="[(v) => !!v || '用户名不能为空']">
+                        <var-input v-model="userStore.loginData.account" placeholder="请输入用户名" clearable
+                                :rules="[(v) => !!v || '用户名不能为空']" autocomplete="username">
                                 <template #prepend-icon>
                                         <var-icon name="account-circle" />
                                 </template>
                         </var-input>
 
-                        <var-input v-model="loginData.passwd" placeholder="请输入密码" type="password" clearable
-                                :input-props="{ autocomplete: 'current-password' }" :rules="[(v) => !!v || '密码不能为空']">
+                        <var-input v-model="userStore.loginData.passwd" placeholder="请输入密码" type="password" clearable
+                                autocomplete="new-password" :rules="[(v) => !!v || '密码不能为空']">
                                 <template #prepend-icon>
                                         <var-icon name="lock" />
                                 </template>
@@ -33,20 +32,23 @@
                         </div>
                 </var-space>
         </var-form>
-
 </template>
 
 <script setup lang="ts" name="LoginPage">
-import { reactive, readonly, ref } from 'vue';
 import { Snackbar } from '@varlet/ui';
+import { useUserStore } from '@/stores/user';
+import { useRouter } from 'vue-router'  // ✅ 引入 useRouter
+
 import axios from 'axios';
-const loginData = reactive({
-        account: '',
-        passwd: ''
-})
+
+
+const router = useRouter()
+const userStore = useUserStore();
+
+
 
 const handleLogin = async () => {
-        if (!loginData.account || !loginData.passwd) {
+        if (!userStore.loginData.account || !userStore.loginData.passwd) {
                 Snackbar.warning('请输入完整的用户名和密码')
                 return
         }
@@ -58,8 +60,8 @@ const handleLogin = async () => {
                         null,                // 因为后端使用 @RequestParam，不接收 JSON
                         {
                                 params: {
-                                        account: loginData.account,
-                                        passwd: loginData.passwd,
+                                        account: userStore.loginData.account,
+                                        passwd: userStore.loginData.passwd,
                                 },
                         }
                 );
@@ -69,8 +71,9 @@ const handleLogin = async () => {
                 if (data.tokenValue) {
                         // 保存 token 到 localStorage，便于后续请求使用
                         localStorage.setItem('satoken', data.tokenValue);
-                        Snackbar.success(`欢迎回来，${loginData.account}`);
+                        Snackbar.success(`欢迎回来，${userStore.loginData.account}`);
                         console.log('登录成功:', data);
+                        router.push('/MainPage');
                 } else {
                         Snackbar.error('登录失败，请检查用户名和密码');
                 }
@@ -85,11 +88,6 @@ const handleLogin = async () => {
 
 
 <style scoped>
-.login-card {
-        width: 380px;
-        border-radius: 1rem;
-}
-
 .login-button {
         border-radius: 1rem;
 }
@@ -101,10 +99,6 @@ const handleLogin = async () => {
         margin-bottom: 1.5rem;
         margin-top: 1.5rem;
         color: #333;
-}
-
-.login-form {
-        width: 100%;
 }
 
 .links {

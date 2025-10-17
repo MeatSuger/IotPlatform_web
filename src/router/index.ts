@@ -1,6 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import Login from '@/components/login.vue';
-import ResingerPage from '@/views/ResingerPage.vue';
+import Login from '@/components/Login.vue';
+import ResingerPage from '@/components/Resinger.vue';
 
 
 

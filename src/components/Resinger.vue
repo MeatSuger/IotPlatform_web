@@ -1,9 +1,9 @@
 <template>
+
         <h2 class="title">注册账号</h2>
         <var-form>
                 <var-space direction="column" size="large">
-                        <var-input v-model="loginData.account" placeholder="请输入用户名" clearable
-                                :rules="[(v) => !!v || '用户名不能为空']">
+                        <var-input v-model="loginData.account" placeholder="请输入用户名" :rules="[(v) => !!v || '用户名不能为空']">
                                 <template #prepend-icon>
                                         <var-icon name="account-circle" />
                                 </template>
@@ -39,10 +39,13 @@
 <script setup lang="ts">
 import { reactive } from 'vue';
 import { Snackbar } from '@varlet/ui';
-import axios from 'axios';
+import { useUserStore } from '@/stores/user';
 import { useRouter } from 'vue-router'  // ✅ 引入 useRouter
 
+
+import axios from 'axios';
 const router = useRouter()
+const userStore = useUserStore();
 const loginData = reactive({
         account: '',
         passwd: '',
@@ -74,7 +77,7 @@ const handleResinger = async () => {
                 if (res.status === 200) {
                         // 保存 token 到 localStorage，便于后续请求使用
                         Snackbar.success(`注册成功${loginData.account}`);
-
+                        userStore.setLoginData(loginData.account, loginData.passwd, res.data.tokenValue);
                         // 可以在这里跳转到登录页面或其他页面
                         router.push('/login');
                 } else {
@@ -87,4 +90,24 @@ const handleResinger = async () => {
         }
 }
 </script>
-<style scoped></style>
+<style scoped>
+.login-button {
+        border-radius: 1rem;
+}
+
+.title {
+
+        font-size: 1.8rem;
+        text-align: center;
+        margin-bottom: 1.5rem;
+        margin-top: 1.5rem;
+        color: #333;
+}
+
+.links {
+        display: flex;
+        justify-content: space-between;
+        font-size: 0.9rem;
+        margin-top: 0.5rem;
+}
+</style>

@@ -8,9 +8,6 @@
 
 <script setup lang="ts">
 
-import axios from 'axios'
-
-
 </script>
 
 <style scoped>
@@ -32,12 +29,12 @@ import axios from 'axios'
         box-sizing: border-box;
 }
 
+
 .login-card {
         width: 380px;
         border-radius: 1rem;
 }
 
-/*
 .login-button {
         border-radius: 1rem;
 }
@@ -60,7 +57,7 @@ import axios from 'axios'
         justify-content: space-between;
         font-size: 0.9rem;
         margin-top: 0.5rem;
-} */
+}
 
 /* 📱 移动端：居中且两侧留白 */
 @media (max-width: 768px) {

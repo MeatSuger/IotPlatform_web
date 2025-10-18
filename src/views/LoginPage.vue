@@ -1,12 +1,12 @@
 <template>
         <div class="login-page">
-                <var-card class="login-card" variant="standard" elevation="10" image-width="380px">
+                <v-card class="login-card" variant="elevated" elevation="10" max-width="380">
                         <router-view />
-                </var-card>
+                </v-card>
         </div>
 </template>
 
-<script setup lang="ts">
+<script setup lang="ts" name="LoginPage">
 
 </script>
 

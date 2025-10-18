@@ -1,37 +1,35 @@
 <template>
 
         <h2 class="title">欢迎登录</h2>
-        <var-form>
-                <var-space direction="column" size="large">
-                        <var-input v-model="userStore.loginData.account" placeholder="请输入用户名" clearable
-                                :rules="[(v) => !!v || '用户名不能为空']" autocomplete="username">
-                                <template #prepend-icon>
-                                        <var-icon name="account-circle" />
-                                </template>
-                        </var-input>
+        <v-form @submit.prevent="handleLogin" ref="form" class="pa-4" validate-on="blur">
+                <v-container class="d-flex flex-column gap-4" max-width="400">
+                        <!-- 用户名输入框 -->
+                        <v-text-field v-model="userStore.loginData.account" label="用户名" density="compact"
+                                variant="outlined" prepend-inner-icon="mdi-account-circle" clearable
+                                :rules="[v => !!v || '用户名不能为空']" autocomplete="username" />
 
-                        <var-input v-model="userStore.loginData.passwd" placeholder="请输入密码" type="password" clearable
-                                autocomplete="new-password" :rules="[(v) => !!v || '密码不能为空']">
-                                <template #prepend-icon>
-                                        <var-icon name="lock" />
-                                </template>
-                        </var-input>
+                        <!-- 密码输入框 -->
+                        <v-text-field v-model="userStore.loginData.passwd" label="密码" prepend-inner-icon="mdi-lock"
+                                variant="outlined" density="compact" type="password" clearable
+                                :rules="[v => !!v || '密码不能为空']" autocomplete="new-password" />
 
-                        <var-button class="login-button" block type="primary" size="large" @click="handleLogin"
-                                v-ripple="true">
+                        <!-- 登录按钮 -->
+                        <v-btn type="submit" color="primary" size="large" block elevation="2">
                                 登录
-                        </var-button>
+                        </v-btn>
 
-                        <div class="links">
-                                <router-link to="#">
-                                        <var-link type="primary" underline="hover">忘记密码？</var-link>
-                                </router-link>
-                                <router-link to="/resinger">
-                                        <var-link type="primary" underline="hover">注册账号</var-link>
-                                </router-link>
+                        <!-- 链接部分 -->
+                        <div class="d-flex justify-space-between">
+                                <RouterLink to="#">
+                                        <v-btn variant="text" color="primary">忘记密码？</v-btn>
+                                </RouterLink>
+
+                                <RouterLink to="/auth/resinger">
+                                        <v-btn variant="text" color="primary">注册账号</v-btn>
+                                </RouterLink>
                         </div>
-                </var-space>
-        </var-form>
+                </v-container>
+        </v-form>
 </template>
 
 <script setup lang="ts" name="LoginPage">
@@ -106,5 +104,17 @@ const handleLogin = async () => {
         justify-content: space-between;
         font-size: 0.9rem;
         margin-top: 0.5rem;
+}
+
+.d-flex {
+        display: flex;
+}
+
+.flex-column {
+        flex-direction: column;
+}
+
+.gap-4 {
+        gap: 16px;
 }
 </style>

@@ -1,86 +1,84 @@
 <template>
-
-        <h2 class="title">欢迎登录</h2>
-        <v-form @submit.prevent="handleLogin" ref="form" class="pa-4" validate-on="blur">
-                <v-container class="d-flex flex-column gap-4" max-width="400">
-                        <!-- 用户名输入框 -->
-                        <v-text-field v-model="userStore.loginData.account" label="用户名" density="compact"
-                                variant="outlined" prepend-inner-icon="mdi-account-circle" clearable
-                                :rules="[v => !!v || '用户名不能为空']" autocomplete="username" />
-
-                        <!-- 密码输入框 -->
-                        <v-text-field v-model="userStore.loginData.passwd" label="密码" prepend-inner-icon="mdi-lock"
-                                variant="outlined" density="compact" type="password" clearable
-                                :rules="[v => !!v || '密码不能为空']" autocomplete="new-password" />
-
-                        <!-- 登录按钮 -->
-                        <v-btn type="submit" color="primary" size="large" block elevation="2">
-                                登录
-                        </v-btn>
-
-                        <!-- 链接部分 -->
-                        <div class="d-flex justify-space-between">
+        <div class="login-wrap">
+                <h2 class="title">欢迎登录</h2>
+                <el-form ref="formRef" :model="userStore.loginData" :rules="rules" label-width="0" @submit.prevent>
+                        <el-form-item prop="account">
+                                <el-input v-model="userStore.loginData.account" placeholder="用户名" clearable
+                                        autocomplete="username" />
+                        </el-form-item>
+                        <el-form-item prop="passwd">
+                                <el-input v-model="userStore.loginData.passwd" placeholder="密码" clearable show-password
+                                        autocomplete="current-password" />
+                        </el-form-item>
+                        <el-form-item>
+                                <el-button type="primary" :loading="loading" style="width:100%"
+                                        @click="onSubmit">登录</el-button>
+                        </el-form-item>
+                        <div class="links">
                                 <RouterLink to="#">
-                                        <v-btn variant="text" color="primary">忘记密码？</v-btn>
-                                </RouterLink>
 
+                                        <el-link type="primary"> 忘记密码？</el-link>
+
+                                </RouterLink>
                                 <RouterLink to="/auth/resinger">
-                                        <v-btn variant="text" color="primary">注册账号</v-btn>
+                                        <el-link type="primary">注册账号</el-link>
+
                                 </RouterLink>
                         </div>
-                </v-container>
-        </v-form>
+                </el-form>
+        </div>
 </template>
 
 <script setup lang="ts" name="LoginPage">
-import { Snackbar } from '@varlet/ui';
-import { useUserStore } from '@/stores/user';
-import { useRouter } from 'vue-router'  // ✅ 引入 useRouter
-
-import axios from 'axios';
-
+import { ref } from 'vue'
+import { useUserStore } from '@/stores/user'
+import { useRouter } from 'vue-router'
+import axios from 'axios'
+import { ElMessage } from 'element-plus'
+import type { FormInstance, FormRules } from 'element-plus'
 
 const router = useRouter()
-const userStore = useUserStore();
+const userStore = useUserStore()
+const loading = ref(false)
+const formRef = ref<FormInstance>()
+const rules = ref<FormRules<typeof userStore.loginData>>({
+        account: [{ required: true, message: '用户名不能为空', trigger: 'blur' }],
+        passwd: [{ required: true, message: '密码不能为空', trigger: 'blur' }],
+})
 
-
-
-const handleLogin = async () => {
-        if (!userStore.loginData.account || !userStore.loginData.passwd) {
-                Snackbar.warning('请输入完整的用户名和密码')
-                return
-        }
-
-        try {
-                // 注意：这里不需要多余的问号 '?'
-                const res = await axios.post(
-                        '/user/login',       // 后端接口 URL
-                        null,                // 因为后端使用 @RequestParam，不接收 JSON
-                        {
-                                params: {
-                                        account: userStore.loginData.account,
-                                        passwd: userStore.loginData.passwd,
-                                },
+const onSubmit = () => {
+        if (!formRef.value) return
+        formRef.value.validate(async (valid) => {
+                if (!valid) return
+                loading.value = true
+                try {
+                        const res = await axios.post(
+                                '/user/login',
+                                null,
+                                {
+                                        params: {
+                                                account: userStore.loginData.account,
+                                                passwd: userStore.loginData.passwd,
+                                        },
+                                }
+                        )
+                        const data = res.data?.data
+                        if (data?.tokenValue) {
+                                axios.defaults.headers.common['Authorization'] = `${data.tokenValue}`;
+                                localStorage.setItem('satoken', data.tokenValue)
+                                ElMessage.success(`欢迎回来，${userStore.loginData.account}`)
+                                router.push('/MainPage/dashboard')
+                        } else {
+                                ElMessage.error('登录失败，请检查用户名和密码')
                         }
-                );
-
-                const data = res.data;
-
-                if (data.tokenValue) {
-                        // 保存 token 到 localStorage，便于后续请求使用
-                        localStorage.setItem('satoken', data.tokenValue);
-                        Snackbar.success(`欢迎回来，${userStore.loginData.account}`);
-                        console.log('登录成功:', data);
-                        router.push('/MainPage');
-                } else {
-                        Snackbar.error('登录失败，请检查用户名和密码');
+                } catch (error: any) {
+                        console.error('登录失败:', error)
+                        const msg = error?.response?.data?.message || error?.message || '登录请求失败，请稍后重试'
+                        ElMessage.error(msg)
+                } finally {
+                        loading.value = false
                 }
-        } catch (error: any) {
-                console.error('登录失败:', error);
-                const msg = error.response?.data || '登录请求失败，请稍后重试';
-                Snackbar.error(msg);
-        }
-
+        })
 }
 </script>
 
@@ -106,15 +104,9 @@ const handleLogin = async () => {
         margin-top: 0.5rem;
 }
 
-.d-flex {
-        display: flex;
-}
-
-.flex-column {
-        flex-direction: column;
-}
-
-.gap-4 {
-        gap: 16px;
+.login-wrap {
+        max-width: 400px;
+        margin: 0 auto;
+        padding: 16px;
 }
 </style>

@@ -4,6 +4,9 @@ import ResingerPage from '@/components/Resinger.vue';
 import LoginPage from '@/views/LoginPage.vue';
 import MainPage from '@/views/MainPage.vue';
 import Dashboard from '@/components/Dashboard.vue'
+import DeviceInfo from '@/components/Device/DeviceInfo.vue';
+import Monitor from '@/components/Analysis/Analysis.vue';
+
 
 
 const router = createRouter({
@@ -26,8 +29,18 @@ const router = createRouter({
       component: MainPage,
       children: [
         { name: 'dashboard', path: 'dashboard', component: Dashboard },
-        // {name: 'deviceManagement', path: 'deviceManagement', component: () => import('@/components/DeviceManagement.vue')},
-        // {name: 'dataVisualization', path: 'dataVisualization', component: () => import('@/components/DataVisualization.vue')},
+        {
+          path: 'deviceManagement', children: [
+            { name: 'deviceInfo', path: 'deviceInfo', component: DeviceInfo },
+            // Additional device management routes can be added here
+          ]
+        },
+        {
+          path: '/monitor', children: [{
+            name: 'monitor', path: 'monitor', component: Monitor,
+          }
+          ]
+        },
         // {name: 'userProfile', path: 'userProfile', component: () => import('@/components/UserProfile.vue')
       ]
     }

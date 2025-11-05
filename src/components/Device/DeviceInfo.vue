@@ -46,6 +46,7 @@
 <script setup lang="ts">
 import { reactive, ref, onMounted } from 'vue'
 import axios from 'axios'
+import { ElMessage } from 'element-plus'
 
 const value1 = ref('')
 const query = reactive({
@@ -57,6 +58,8 @@ type ColDef = { prop: string; label: string; width?: number }
 const dynamicCols = ref<string[]>([])
 const tableData = ref<any[]>([])
 onMounted(() => {
+        axios.defaults.headers.common['Authorization'] = `${localStorage.getItem('token')}`
+        console.log(axios.defaults.headers.common['Authorization']);
         loadColumns()
 })
 async function loadColumns() {
@@ -71,10 +74,13 @@ async function loadColumns() {
                 } else {
                         dynamicCols.value = []
                 }
-        } catch (e) {
+        } catch (e: unknown) {
                 console.error('load columns failed', e)
+                const msg = e instanceof Error ? e.message : String(e)
+                ElMessage.error(msg)
                 dynamicCols.value = []
                 tableData.value = []
+
         }
 }
 const shortcuts = [

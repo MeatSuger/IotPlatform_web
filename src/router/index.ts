@@ -6,7 +6,7 @@ import MainPage from '@/views/MainPage.vue';
 import Dashboard from '@/components/Dashboard.vue'
 import DeviceInfo from '@/components/Device/DeviceInfo.vue';
 import Monitor from '@/components/Analysis/Analysis.vue';
-
+import AddDevice from '@/components/Device/AddDevice.vue';
 
 
 const router = createRouter({
@@ -32,6 +32,7 @@ const router = createRouter({
         {
           path: 'deviceManagement', children: [
             { name: 'deviceInfo', path: 'deviceInfo', component: DeviceInfo },
+            { name: 'addDevice', path: 'addDevice', component: AddDevice },
             // Additional device management routes can be added here
           ]
         },

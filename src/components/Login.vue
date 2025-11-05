@@ -33,9 +33,9 @@
 import { ref } from 'vue'
 import { useUserStore } from '@/stores/user'
 import { useRouter } from 'vue-router'
-import axios from 'axios'
 import { ElMessage } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
+import { login as loginApi } from '@/services/auth'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -51,35 +51,23 @@ const onSubmit = () => {
         formRef.value.validate(async (valid) => {
                 if (!valid) return
                 loading.value = true
-                try {
-                        const res = await axios.post(
-                                '/user/login',
-                                null,
-                                {
-                                        params: {
-                                                account: userStore.loginData.account,
-                                                passwd: userStore.loginData.passwd,
-                                        },
-                                }
-                        )
-                        const data = res.data?.data
-                        if (data?.tokenValue) {
-                                axios.defaults.headers.common['Authorization'] = `${data.tokenValue}`;
-                                localStorage.setItem('satoken', data.tokenValue)
-                                ElMessage.success(`欢迎回来，${userStore.loginData.account}`)
-                                router.push('/MainPage/dashboard')
-                        } else {
-                                ElMessage.error('登录失败，请检查用户名和密码')
-                        }
-                } catch (error: any) {
-                        console.error('登录失败:', error)
-                        const msg = error?.response?.data?.message || error?.message || '登录请求失败，请稍后重试'
-                        ElMessage.error(msg)
-                } finally {
-                        loading.value = false
-                }
+                loginApi(userStore.loginData)
+                        .then((data) => {
+                                userStore.setToken(data.tokenValue ?? '')
+                                ElMessage.success('登录成功')
+                                router.push({ name: 'dashboard' })
+                        })
+                        .catch((err) => {
+                                console.error('登录失败', err)
+                                ElMessage.error(err.response?.data?.message || '登录失败')
+                        })
+                        .finally(() => {
+                                loading.value = false
+                        })
         })
 }
+
+
 </script>
 
 

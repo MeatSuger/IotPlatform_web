@@ -75,6 +75,7 @@ const items = [
         {
                 title: '设备管理', icon: 'mdi-router-wireless', name: 'devices', chindern: [
                         { title: '设备信息', routeName: 'deviceInfo' },
+                        { title: '添加设备', routeName: 'addDevice' },
                 ]
         },
         { title: '数据监控', icon: 'mdi-chart-line', name: 'monitor', routeName: 'monitor' },

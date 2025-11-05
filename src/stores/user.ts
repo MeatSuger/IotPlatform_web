@@ -16,6 +16,8 @@ export const useUserStore = defineStore('user', () => {
                 loginData.passwd = passwd;
                 loginData.saToken = saToken;
         };
-
-        return { loginData, setLoginData };
+        const setToken = (token: string) => {
+                loginData.saToken = token;
+        }
+        return { loginData, setLoginData, setToken };
 });

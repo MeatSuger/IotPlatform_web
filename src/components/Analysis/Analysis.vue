@@ -1,52 +1,40 @@
 <template>
-    <el-card >
-            <template #header>
-                <el-form :model="query" :inline="true" class="demo-form-inline">
+    <el-card>
+        <template #header>
+            <el-form :model="query" :inline="true" class="demo-form-inline">
                 <el-form-item label="date range">
-                    <el-date-picker
-                        v-model="value1"
-                        type="datetimerange"
-                        range-separator="To"
-                        start-placeholder="Start date"
-                        end-placeholder="End date"
-                        :shortcuts="shortcuts"
-                    />
+                    <el-date-picker v-model="value1" type="datetimerange" range-separator="To"
+                        start-placeholder="Start date" end-placeholder="End date" :shortcuts="shortcuts" />
                 </el-form-item>
-                    <el-form-item label="device id">
-                        <el-input v-model="query.deviceId" placeholder="设备ID" clearable />
-                    </el-form-item>
+                <el-form-item label="device id">
+                    <el-input v-model="query.deviceId" placeholder="设备ID" clearable />
+                </el-form-item>
                 <el-form-item label="keyword">
                     <el-input v-model="query.keyword" placeholder="" clearable />
                 </el-form-item>
-                      
-        <el-form-item label="">
-            <el-button type="primary" :loading="loading" @click="onQuery()">query</el-button>
+
+                <el-form-item label="">
+                    <el-button type="primary" :loading="loading" @click="onQuery()">query</el-button>
                 </el-form-item>
                 <el-form-item label="">
                     <el-button type="text">导出</el-button>
                 </el-form-item>
             </el-form>
         </template>
-            <div>
-                <!-- 折线图：展示监控指标趋势，与设备信息页风格一致 -->
-                <v-chart class="chart" :option="chartOption" autoresize />
+        <div>
+            <!-- 折线图：展示监控指标趋势，与设备信息页风格一致 -->
+            <v-chart class="chart" :option="chartOption" autoresize />
 
-                <el-table :data="tablePageData" border stripe max-height="450px" :loading="loading" class="equal-cols">
+            <el-table :data="tablePageData" border stripe max-height="450px" :loading="loading" class="equal-cols">
                 <el-table-column prop="timestamp" label="Time" show-overflow-tooltip align="center" />
                 <el-table-column prop="name" label="Name" show-overflow-tooltip align="center" />
                 <el-table-column prop="type" label="Type" show-overflow-tooltip align="center" />
                 <el-table-column prop="value" label="Value" show-overflow-tooltip align="center" />
             </el-table>
             <div class="pagination-wrap">
-                    <el-pagination
-                        layout="prev, pager, next, sizes, total"
-                        :total="tableTotal"
-                        :current-page="currentPage"
-                        :page-size="pageSize"
-                        :page-sizes="[10, 20, 50, 100]"
-                        @current-change="onPageChange"
-                        @size-change="onPageSizeChange"
-                    />
+                <el-pagination layout="prev, pager, next, sizes, total" :total="tableTotal" :current-page="currentPage"
+                    :page-size="pageSize" :page-sizes="[10, 20, 50, 100]" @current-change="onPageChange"
+                    @size-change="onPageSizeChange" />
             </div>
         </div>
     </el-card>
@@ -109,18 +97,18 @@ const loading = ref(false)
 
 // 最简单方式在前端附带“类似 cookie”的凭证：直接加 Authorization 头
 // 注意：浏览器不允许前端直接设置 Cookie 请求头；要发送真正 Cookie 需后端通过 Set-Cookie 设置，且域名一致。
-const authToken = ref(localStorage.getItem('Authorization') || '')
-function applyToken() {
-    if (authToken.value) {
-        localStorage.setItem('Authorization', authToken.value)
-        axios.defaults.headers.common['Authorization'] = authToken.value
-    } else {
-        localStorage.removeItem('Authorization')
-        delete axios.defaults.headers.common['Authorization']
-    }
-}
-// 应用已保存的 token（页面加载时）
-applyToken()
+// const authToken = ref(localStorage.getItem('Authorization') || '')
+// function applyToken() {
+//     if (authToken.value) {
+//         localStorage.setItem('Authorization', authToken.value)
+//         axios.defaults.headers.common['Authorization'] = authToken.value
+//     } else {
+//         localStorage.removeItem('Authorization')
+//         delete axios.defaults.headers.common['Authorization']
+//     }
+// }
+// // 应用已保存的 token（页面加载时）
+// applyToken()
 
 
 // 直接使用后端数据结构（name/type/value/timestamp），不过滤/复制一遍
@@ -194,10 +182,9 @@ async function onQuery(silent = false) {
     loading.value = true
     try {
         // 使用 axios 全局 baseURL 和 withCredentials，从 Cookie 携带 Authorization
-            const { data } = await axios.get(`/data/${encodeURIComponent(query.deviceId)}/Data/list`, {
+        const { data } = await axios.get(`/data/${encodeURIComponent(query.deviceId)}/Data/list`, {
             params: { limit: Math.max(pageSize.value * 5, 100) }, // 一次取更多，前端分页
-                // 额外兜底：如果全局未设置默认 Authorization，则本次请求携带（最简方式）
-                headers: authToken.value ? { Authorization: authToken.value } : undefined,
+            // 额外兜底：如果全局未设置默认 Authorization，则本次请求携带（最简方式）
         })
         if (data.data == null && !silent) {
             ElMessage.info(`服务器返回：${data?.message ?? '无数据'}`)

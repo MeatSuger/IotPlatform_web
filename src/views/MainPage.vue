@@ -18,7 +18,8 @@
                                         <span>Tom</span>
                                 </div>
                         </el-header>
-                        <el-container>
+                        <!-- 主体容器自身承接滚动 -->
+                        <el-container class="body-container">
                                 <el-aside width="150px">
                                         <el-scrollbar class="aside-scroll">
                                                 <el-menu :default-openeds="['1']" :router="true">
@@ -55,7 +56,7 @@
                                         </el-scrollbar>
                                 </el-aside>
                                 <el-container style="background-color: aqua;">
-                                        <el-main>
+                                        <el-main class="main-scroll">
                                                 <RouterView />
                                         </el-main>
                                 </el-container>
@@ -86,21 +87,34 @@ const items = [
 
 <style scoped>
 .el-container-prv {
-
-        position: fixed;
-        /* ✅ 确保铺满整个视口 */
-        top: 0;
-        left: 0;
-        min-width: 100%;
-        min-height: 100%;
+        /* 用 100% 替代 100vw，避免滚动条宽度引发溢出 */
+        position: relative;
+        width: 100%;
+        height: 100vh;
         display: flex;
         justify-content: flex-end;
-
+        overflow: hidden;
+        /* 禁止窗口级溢出 */
 }
 
+.common-layout {
+        height: 100%;
+        overflow: hidden;
+}
 
-.aside-spacer {
-        flex: 1 1 auto;
+.body-container {
         min-height: 0;
+        /* 关键：允许子项按容器收缩，避免被内容撑开 */
+        overflow: hidden;
+}
+
+.aside-scroll {
+        height: 100%;
+}
+
+.main-scroll {
+        height: 100%;
+        overflow: auto;
+        /* 内容在这里滚动 */
 }
 </style>

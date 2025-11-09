@@ -13,7 +13,7 @@
 <style scoped>
 .login-page {
         position: fixed;
-        /* ✅ 确保铺满整个视口 */
+        /* ✅ 铺满视口 */
         top: 0;
         left: 0;
         width: 100%;
@@ -27,6 +27,8 @@
         background-position: center;
         padding-right: 10vw;
         box-sizing: border-box;
+        overflow: hidden;
+        /* 防止内部阴影或浮层造成窗口滚动 */
 }
 
 

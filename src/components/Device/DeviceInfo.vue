@@ -112,6 +112,5 @@ const shortcuts = [
 
                 }
         }];
-// ...existing code...
 </script>
 <style scoped></style>

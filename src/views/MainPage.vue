@@ -66,10 +66,8 @@
 </template>
 
 <script setup lang="ts" name="MainPage">
-import { StyleProvider, Themes } from '@varlet/ui';
-import { Menu as IconMenu, Message, Setting } from '@element-plus/icons-vue'
+import { Menu as Message, Setting } from '@element-plus/icons-vue'
 
-StyleProvider(Themes.md3Dark)
 
 const items = [
         { title: '仪表盘', icon: 'mdi-view-dashboard', name: 'dashboard', routeName: 'dashboard' },
@@ -87,14 +85,14 @@ const items = [
 
 <style scoped>
 .el-container-prv {
-        /* 用 100% 替代 100vw，避免滚动条宽度引发溢出 */
-        position: relative;
+        position: fixed;
+        /* ✅ 铺满视口 */
+        top: 0;
+        left: 0;
         width: 100%;
-        height: 100vh;
+        height: 100%;
         display: flex;
         justify-content: flex-end;
-        overflow: hidden;
-        /* 禁止窗口级溢出 */
 }
 
 .common-layout {

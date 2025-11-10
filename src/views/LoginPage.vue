@@ -1,12 +1,15 @@
 <template>
         <div class="login-page">
-                <v-card class="login-card" variant="elevated" elevation="10" max-width="380">
+                <el-card shadow="hover" class="login-card">
                         <router-view />
-                </v-card>
+                </el-card>
+
         </div>
 </template>
 
 <script setup lang="ts" name="LoginPage">
+import { ElCard } from 'element-plus';
+
 
 </script>
 

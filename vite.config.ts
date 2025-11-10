@@ -7,6 +7,7 @@ import vueDevTools from 'vite-plugin-vue-devtools'
 
 // https://vite.dev/config/
 export default defineConfig({
+
   plugins: [
     vue(),
     // vueDevTools(),
@@ -26,5 +27,32 @@ export default defineConfig({
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url))
     },
-  },
-})
+  }, build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          // 强制将大型依赖从主包中分离
+          'vue-vendor': ['vue', 'vue-router', 'pinia'],
+          'element-ui': ['element-plus', '@element-plus/icons-vue'],
+          'utils': ['axios'],
+
+          // 如果还有大型业务模块，也单独分离
+          'dashboard-module': [
+            '@/views/MainPage.vue',
+            '@/components/Dashboard.vue',
+            '@/components/Device/DeviceInfo.vue',
+            '@/components/Device/AddDevice.vue'
+          ],
+
+          // 将首页相关组件分离
+          'home-module': [
+            '@/views/LoginPage.vue',
+            '@/components/Login.vue'
+          ]
+        }
+      }
+    },
+    chunkSizeWarningLimit: 1000
+  }
+},
+)

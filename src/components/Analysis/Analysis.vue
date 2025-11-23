@@ -41,7 +41,8 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { reactive, ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { use } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
 import { LineChart } from 'echarts/charts'
@@ -86,6 +87,23 @@ const shortcuts = [
 const query = reactive({
     deviceId: '',
     keyword: '',
+})
+
+// 从路由 query 中自动吸收 deviceId（支持用户直接访问带参数的链接）
+const route = useRoute()
+function syncDeviceIdFromRoute() {
+    const rid = route.query.deviceId
+    if (typeof rid === 'string' && rid && rid !== query.deviceId) {
+        query.deviceId = rid
+        // 自动触发一次查询
+        onQuery()
+    }
+}
+// 首次加载时同步
+syncDeviceIdFromRoute()
+// 监听路由变化（例如从设备列表点击跳转）
+watch(() => route.query.deviceId, () => {
+    syncDeviceIdFromRoute()
 })
 
 // 原始数据与分页相关状态
@@ -183,7 +201,7 @@ async function onQuery(silent = false) {
     try {
         // 使用 axios 全局 baseURL 和 withCredentials，从 Cookie 携带 Authorization
         const { data } = await axios.get(`/data/${encodeURIComponent(query.deviceId)}/Data/list`, {
-            params: { limit: Math.max(pageSize.value * 5, 100) }, // 一次取更多，前端分页
+            params: { limit: Math.max(pageSize.value * 2, 20) }, // 一次取更多，前端分页
             // 额外兜底：如果全局未设置默认 Authorization，则本次请求携带（最简方式）
         })
         if (data.data == null && !silent) {
@@ -224,7 +242,10 @@ function onPageSizeChange(size: number) {
 
 // 初次加载 + 5 秒自动刷新（避免并发：loading 时跳过）
 onMounted(() => {
-    onQuery()
+    // 若没有通过路由带 deviceId，则尝试初次查询（可能为空，不触发请求）
+    if (query.deviceId) {
+        onQuery()
+    }
     const timer = window.setInterval(() => {
         if (!loading.value) {
             onQuery(true)

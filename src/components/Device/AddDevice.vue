@@ -16,7 +16,8 @@
                         </el-form-item>
                         <el-form-item label="deviceType" prop="deviceType">
                             <el-select v-model="ruleForm.deviceType" placeholder="please select your zone">
-                                <el-option v-for="value in devices_type" :label="value" :value="value" />
+                                <el-option label="温度(°C)" value="temptaure" />
+                                <el-option label="湿度(%RH)" value="humidy" />
                             </el-select>
                         </el-form-item>
                         <el-form-item label="firmwareVersion">
@@ -66,10 +67,8 @@ const ruleForm = reactive<RuleForm>({
 });
 
 const devices_type = [
-    "Type A",
-    "Type B",
-    "Type C",
-    "Type D"
+    "temptaure(°C)",
+    "humidy(%RH)",
 ]
 
 const rules = reactive<FormRules<RuleForm>>({

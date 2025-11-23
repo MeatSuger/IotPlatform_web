@@ -26,19 +26,27 @@
 
 
                 <div>
-                        <el-table :data="tableData" border stripe height="500px">
+                        <el-table :data="tableData" border stripe height="500px"
+                                :default-sort="{ prop: 'id', order: 'descending' }">
                                 <el-table-column v-for="col in dynamicCols" :key="col" :prop="col" :label="col"
                                         show-overflow-tooltip>
                                         <template #default="{ row }">
-                                                {{ row[col] ?? '' }}
+                                                <!-- 当列名为 id 或 deviceId（不区分大小写）时，渲染为可点击链接，携带 deviceId 到分析页 -->
+                                                <template v-if="['deviceid'].includes(String(col).toLowerCase())">
+                                                        <router-link :to="{ name: 'monitor', query: { deviceId: row[col] } }">
+                                                                {{ row[col] ?? '' }}
+                                                        </router-link>
+                                                </template>
+                                                <template v-else>
+                                                        {{ row[col] ?? '' }}
+                                                </template>
                                         </template>
-                                </el-table-column>
+                                </el-table-column> 
                         </el-table>
                         <div class="pagination-wrap">
                                 <el-pagination layout="prev, pager, next" :total="50" />
                         </div>
                 </div>
-
         </el-card>
 
 </template>

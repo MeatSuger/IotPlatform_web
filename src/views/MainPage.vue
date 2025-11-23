@@ -9,9 +9,8 @@
                                                 </el-icon>
                                                 <template #dropdown>
                                                         <el-dropdown-menu>
-                                                                <el-dropdown-item>View</el-dropdown-item>
-                                                                <el-dropdown-item>Add</el-dropdown-item>
-                                                                <el-dropdown-item>Delete</el-dropdown-item>
+                                                                <el-dropdown-item>我的</el-dropdown-item>
+                                                                <el-dropdown-item>登出</el-dropdown-item>
                                                         </el-dropdown-menu>
                                                 </template>
                                         </el-dropdown>
@@ -21,7 +20,7 @@
                         <!-- 主体容器自身承接滚动 -->
                         <el-container class="body-container">
                                 <el-aside width="150px">
-                                        <el-scrollbar class="aside-scroll">
+                                        <el-scrollbar class="aside-scrol">
                                                 <el-menu :default-openeds="['1']" :router="true">
                                                         <template v-for="(item, i) in items" :key="i">
                                                                 <!-- 有子菜单：使用 sub-menu -->
@@ -70,7 +69,7 @@ import { Menu as Message, Setting } from '@element-plus/icons-vue'
 
 
 const items = [
-        { title: '仪表盘', icon: 'mdi-view-dashboard', name: 'dashboard', routeName: 'dashboard' },
+        { title: '仪表盘', icon: 'Odomete', name: 'dashboard', routeName: 'dashboard' },
         {
                 title: '设备管理', icon: 'mdi-router-wireless', name: 'devices', chindern: [
                         { title: '设备信息', routeName: 'deviceInfo' },

@@ -43,7 +43,6 @@ export default defineConfig({
             '@/components/Device/DeviceInfo.vue',
             '@/components/Device/AddDevice.vue'
           ],
-
           // 将首页相关组件分离
           'home-module': [
             '@/views/LoginPage.vue',

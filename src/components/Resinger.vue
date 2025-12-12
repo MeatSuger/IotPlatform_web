@@ -18,7 +18,7 @@
                                         </el-form-item>
                                         <el-form-item>
                                                 <el-button type="primary" :loading="loading" style="width:100%"
-                                                        native-type="submit">注册</el-button>
+                                                        native-type="submit" @click="onSubmit">注册</el-button>
                                         </el-form-item>
                                         <div class="links">
                                                 <RouterLink to="/auth/login">
@@ -37,6 +37,7 @@ import { useRouter } from 'vue-router'
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
+import { resinger as registerApi, resinger } from '@/services/auth'
 
 const router = useRouter()
 
@@ -64,6 +65,7 @@ const rules = ref<FormRules<typeof form>>({
 })
 
 const onSubmit = () => {
+        console.log('提交注册表单')
         if (!formRef.value) return
         formRef.value.validate(async (valid) => {
                 if (!valid) return
@@ -72,24 +74,19 @@ const onSubmit = () => {
                         return
                 }
                 loading.value = true
-                try {
-                        const res = await axios.post('/user/register', {
-                                account: form.account,
-                                passwd: form.passwd,
-                        })
-                        if (res.status === 200) {
-                                ElMessage.success(`注册成功，${form.account}`)
+
+                resinger(form.account, form.passwd)
+                        .then(() => {
+                                ElMessage.success('注册成功')
                                 router.push('/auth/login')
-                        } else {
-                                ElMessage.error('注册失败，请稍后再试')
-                        }
-                } catch (error: any) {
-                        console.error('注册失败:', error)
-                        const msg = error?.response?.data?.message || error?.message || '注册请求失败，请稍后重试'
-                        ElMessage.error(msg)
-                } finally {
-                        loading.value = false
-                }
+                        })
+                        .catch((err) => {
+                                console.error('注册失败', err)
+                                ElMessage.error(err.response?.data?.message || '注册失败')
+                        })
+                        .finally(() => {
+                                loading.value = false
+                        })
         })
 }
 </script>

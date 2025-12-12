@@ -33,3 +33,14 @@ export async function login({ account, passwd }: LoginPayload): Promise<LoginDat
     } catch { }
     return data
 }
+export async function resinger(account: string, passwd: string) {
+    const res = await axios.post(
+        '/user/register',
+        {
+            account: account,
+            passwd: passwd,
+        }
+    )
+    const data = res.data || {}
+    return data
+}

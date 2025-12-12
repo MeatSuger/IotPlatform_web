@@ -1,0 +1,7 @@
+{
+  "name": "iotplatform-web",              // 你的 Workers/Pages 项目名称
+  "compatibility_date": "2025-12-12",     // 固定日期即可
+  "assets": {
+    "directory": "./dist"                 // Vite 构建输出目录
+  }
+}

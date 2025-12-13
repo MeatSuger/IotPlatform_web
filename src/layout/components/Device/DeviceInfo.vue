@@ -33,7 +33,7 @@
                                         <template #default="{ row }">
                                                 <!-- 当列名为 id 或 deviceId（不区分大小写）时，渲染为可点击链接，携带 deviceId 到分析页 -->
                                                 <template v-if="['deviceid'].includes(String(col).toLowerCase())">
-                                                        <router-link :to="{ name: 'monitor', query: { deviceId: row[col] } }">
+                                                                                                        <router-link :to="{ name: 'Monitor', query: { deviceId: row[col] } }">
                                                                 {{ row[col] ?? '' }}
                                                         </router-link>
                                                 </template>
@@ -52,8 +52,10 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref, onMounted } from 'vue'
-import axios from 'axios'
+import { reactive, ref, onMounted, onBeforeUnmount, onErrorCaptured } from 'vue'
+import { onBeforeRouteUpdate } from 'vue-router'
+import { useRoute } from 'vue-router'
+import request from '@/utils/request'
 import { ElMessage } from 'element-plus'
 
 const value1 = ref('')
@@ -65,23 +67,38 @@ const query = reactive({
 type ColDef = { prop: string; label: string; width?: number }
 const dynamicCols = ref<string[]>([])
 const tableData = ref<any[]>([])
+const route = useRoute()
 onMounted(() => {
-        axios.defaults.headers.common['Authorization'] = `${localStorage.getItem('token')}`
-        console.log(axios.defaults.headers.common['Authorization']);
+        console.info('[DeviceInfo] mounted: route=', route.fullPath)
         loadColumns()
+})
+// 使用路由钩子：每次进入/参数变化时刷新列表
+onBeforeRouteUpdate((_to, _from, next) => {
+        console.info('[DeviceInfo] beforeRouteUpdate -> reload list')
+        loadColumns()
+        next()
+})
+onBeforeUnmount(() => {
+    // 清理操作（如果有需要）
+    console.log('DeviceInfo component is being unmounted');
+});
+// 捕获渲染错误，辅助定位未挂载或渲染失败问题
+onErrorCaptured((err) => {
+        console.error('[DeviceInfo] render error:', err)
+        return false
 })
 async function loadColumns() {
         try {
-
-                const { data } = await axios.get('/device/list');
-                // data.data 是设备列表
-                tableData.value = Array.isArray(data.data) ? data.data : []
-                // 用第一个对象的所有 key 作为列名
-                if (tableData.value.length > 0) {
-                        dynamicCols.value = Object.keys(tableData.value[0])
-                } else {
-                        dynamicCols.value = []
-                }
+                const res = await request.get('/device/list');
+                console.log('load columns response:', res)
+                const list = Array.isArray(res?.data?.data)
+                        ? res.data.data
+                        : Array.isArray(res?.data)
+                                ? res.data
+                                : []
+                tableData.value = list
+                dynamicCols.value = list.length > 0 ? Object.keys(list[0]) : []
+                console.info(`[DeviceInfo] list loaded: ${list.length} items`)
         } catch (e: unknown) {
                 console.error('load columns failed', e)
                 const msg = e instanceof Error ? e.message : String(e)

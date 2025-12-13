@@ -1,4 +1,4 @@
-import axios from 'axios'
+import request from '@/utils/request'
 
 export interface LoginPayload {
     account: string
@@ -11,7 +11,7 @@ export interface LoginData {
 }
 
 export async function login({ account, passwd }: LoginPayload): Promise<LoginData> {
-    const res = await axios.post(
+    const res = await request.post(
         '/user/login',
         null,
         {
@@ -23,9 +23,6 @@ export async function login({ account, passwd }: LoginPayload): Promise<LoginDat
         throw new Error('登录失败：未获取到 token')
     }
     const token = data.tokenValue
-    // 设置全局请求头
-    axios.defaults.headers.common['Authorization'] = `${token}`
-    // 持久化（兼容多处读取）
     try {
         localStorage.setItem('satoken', token)
         localStorage.setItem('token', token)
@@ -34,7 +31,7 @@ export async function login({ account, passwd }: LoginPayload): Promise<LoginDat
     return data
 }
 export async function resinger(account: string, passwd: string) {
-    const res = await axios.post(
+    const res = await request.post(
         '/user/register',
         {
             account: account,

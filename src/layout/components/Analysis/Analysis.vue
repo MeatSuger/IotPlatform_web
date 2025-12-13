@@ -42,13 +42,13 @@
 
 <script setup lang="ts">
 import { reactive, ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, onBeforeRouteUpdate } from 'vue-router'
 import { use } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
 import { LineChart } from 'echarts/charts'
 import { GridComponent, TooltipComponent, LegendComponent, TitleComponent } from 'echarts/components'
 import VChart from 'vue-echarts'
-import axios from 'axios'
+import request from '@/utils/request'
 import { ElMessage } from 'element-plus'
 
 use([CanvasRenderer, LineChart, GridComponent, TooltipComponent, LegendComponent, TitleComponent])
@@ -104,6 +104,14 @@ syncDeviceIdFromRoute()
 // 监听路由变化（例如从设备列表点击跳转）
 watch(() => route.query.deviceId, () => {
     syncDeviceIdFromRoute()
+})
+// 每次路由更新（含参数变更）时刷新数据（有 deviceId 时）
+onBeforeRouteUpdate((to, _from, next) => {
+    if (query.deviceId) {
+        console.info('[Analysis] beforeRouteUpdate -> refresh')
+        onQuery(true)
+    }
+    next()
 })
 
 // 原始数据与分页相关状态
@@ -200,7 +208,7 @@ async function onQuery(silent = false) {
     loading.value = true
     try {
         // 使用 axios 全局 baseURL 和 withCredentials，从 Cookie 携带 Authorization
-        const { data } = await axios.get(`/data/${encodeURIComponent(query.deviceId)}/Data/list`, {
+        const { data } = await request.get(`/data/${encodeURIComponent(query.deviceId)}/Data/list`, {
             params: { limit: Math.max(pageSize.value * 2, 20) }, // 一次取更多，前端分页
             // 额外兜底：如果全局未设置默认 Authorization，则本次请求携带（最简方式）
         })
@@ -218,6 +226,7 @@ async function onQuery(silent = false) {
                     : []
         rawData.value = list
         currentPage.value = 1
+        console.info(`[Analysis] data loaded: ${list.length} items`)
         if (!silent) {
             ElMessage.success(`获取数据成功，共 ${list.length} 条`)
         }

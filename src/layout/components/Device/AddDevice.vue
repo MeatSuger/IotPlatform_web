@@ -44,7 +44,7 @@
 </template>
 
 <script lang='ts' setup>
-import axios from 'axios';
+import request from '@/utils/request';
 import { ElMessage, type FormRules } from 'element-plus';
 import { reactive } from 'vue';
 
@@ -80,7 +80,7 @@ const rules = reactive<FormRules<RuleForm>>({
 
 const onSubmit = () => {
     try {
-        axios.post('/device/register', ruleForm)
+        request.post('/device/register', ruleForm)
             .then((data) => {
                 if (data.data.code === 400) {
                     ElMessage.error(data.data.message || 'Failed to add device');

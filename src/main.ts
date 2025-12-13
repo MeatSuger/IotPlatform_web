@@ -1,22 +1,27 @@
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 
-
 import * as ElementPlusIconsVue from '@element-plus/icons-vue'
 import App from './App.vue'
 import router from './router'
-import axios from 'axios'
 import ElementPlus from 'element-plus'
 
 import 'element-plus/dist/index.css'
+import './assets/base.css'
 
 
-// axios 全局设置（放在 main.ts 也行）
-axios.defaults.withCredentials = true  // ✅ 允许跨域携带 cookie
-axios.defaults.baseURL = "https://api.meatsuger.top/api";
-// axios.defaults.baseURL = "http://47.99.74.160:8181/api";
-// axios.defaults.baseURL = "http://localhost:8181/api";
 const app = createApp(App)
+
+// 全局错误/未捕获异常的日志输出，便于定位白屏根因
+app.config.errorHandler = (err, instance, info) => {
+  console.error('[app.errorHandler]', err, info, instance)
+}
+window.addEventListener('error', (event) => {
+  console.error('[window.error]', event.error || event.message, event)
+})
+window.addEventListener('unhandledrejection', (event) => {
+  console.error('[window.unhandledrejection]', event.reason, event)
+})
 
 app.use(createPinia())
 app.use(router)

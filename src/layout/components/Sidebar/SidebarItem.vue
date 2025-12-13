@@ -47,13 +47,6 @@ const IconComp = computed(() => {
     ? (ElIcons as any)[iconName]
     : null
 })
-
-  // 优先使用路由名称进行导航，便于重构路径时保持稳定
-  const routeTarget = computed(() => {
-    const name = props.item.name as string | undefined
-    if (name) return { name }
-    return { path: resolvedPath.value }
-  })
 </script>
 
 <style scoped>

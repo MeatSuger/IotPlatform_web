@@ -7,7 +7,7 @@ import vueDevTools from 'vite-plugin-vue-devtools'
 
 // https://vite.dev/config/
 export default defineConfig({
-  base:"/",
+  base: "/",
   plugins: [
     vue(),
     // vueDevTools(),
@@ -38,15 +38,15 @@ export default defineConfig({
 
           // 如果还有大型业务模块，也单独分离
           'dashboard-module': [
-            '@/views/MainPage.vue',
-            '@/components/Dashboard.vue',
-            '@/components/Device/DeviceInfo.vue',
-            '@/components/Device/AddDevice.vue'
+            '@/layout/index.vue',
+            '@/layout/components/Dashboard.vue',
+            '@/layout/components/Device/DeviceInfo.vue',
+            '@/layout/components/Device/AddDevice.vue'
           ],
           // 将首页相关组件分离
           'home-module': [
             '@/views/LoginPage.vue',
-            '@/components/Login.vue'
+            '@/layout/components/Login.vue'
           ]
         }
       }

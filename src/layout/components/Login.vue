@@ -67,7 +67,7 @@ const onSubmit = () => {
       .then((data) => {
         userStore.setToken(data.tokenValue ?? '')
         ElMessage.success('登录成功')
-        router.push({ name: 'Dashboard' })
+        router.push('dashboard')
       })
       .catch((err) => {
         console.error('登录失败', err)

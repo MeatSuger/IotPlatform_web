@@ -1,80 +1,75 @@
 <template>
-        <div class="login-page">
-                <el-card shadow="hover" class="login-card">
-                        <router-view />
-                </el-card>
-
-        </div>
+  <div class="login-page">
+    <el-card shadow="hover" class="login-card">
+      <router-view />
+    </el-card>
+  </div>
 </template>
 
 <script setup lang="ts" name="LoginPage">
-import { ElCard } from 'element-plus';
-
-
+import { ElCard } from 'element-plus'
 </script>
 
 <style scoped>
 .login-page {
-        position: fixed;
-        /* ✅ 铺满视口 */
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        display: flex;
-        justify-content: flex-end;
-        /* 右侧居中靠右 */
-        align-items: center;
-        background: linear-gradient(135deg, #4e54c8, #8d8eab);
-        background-size: cover;
-        background-position: center;
-        padding-right: 10vw;
-        box-sizing: border-box;
-        overflow: hidden;
-        /* 防止内部阴影或浮层造成窗口滚动 */
+  position: fixed;
+  /* ✅ 铺满视口 */
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  justify-content: flex-end;
+  /* 右侧居中靠右 */
+  align-items: center;
+  background: linear-gradient(135deg, #4e54c8, #8d8eab);
+  background-size: cover;
+  background-position: center;
+  padding-right: 10vw;
+  box-sizing: border-box;
+  overflow: hidden;
+  /* 防止内部阴影或浮层造成窗口滚动 */
 }
 
-
 .login-card {
-        width: 380px;
-        border-radius: 1rem;
+  width: 380px;
+  border-radius: 1rem;
 }
 
 .login-button {
-        border-radius: 1rem;
+  border-radius: 1rem;
 }
 
 .title {
-
-        font-size: 1.8rem;
-        text-align: center;
-        margin-bottom: 1.5rem;
-        margin-top: 1.5rem;
-        color: #333;
+  font-size: 1.8rem;
+  text-align: center;
+  margin-bottom: 1.5rem;
+  margin-top: 1.5rem;
+  color: #333;
 }
 
 .login-form {
-        width: 100%;
+  width: 100%;
 }
 
 .links {
-        display: flex;
-        justify-content: space-between;
-        font-size: 0.9rem;
-        margin-top: 0.5rem;
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.9rem;
+  margin-top: 0.5rem;
 }
 
 /* 📱 移动端：居中且两侧留白 */
 @media (max-width: 768px) {
-        .login-page {
-                justify-content: center;
-                padding: 0 1.5rem;
-        }
+  .login-page {
+    justify-content: center;
+    padding: 0 1.5rem;
+  }
 
-        .login-card {
-                width: 100%;
-                max-width: 360px;
-                border-radius: 12px;
-        }
+  .login-card {
+    width: 100%;
+    max-width: 360px;
+    border-radius: 12px;
+  }
 }
 </style>

@@ -28,15 +28,13 @@ export const constantRoutes: RouteRecordRaw[] = [
     component: () => import('@/views/error/NotFound.vue'),
     meta: { title: '404', public: true },
   },
-  // 404 兜底应作为常量路由，确保异步路由未注册前也可正常跳转
-  { path: '/:pathMatch(.*)*', redirect: '/404', meta: { public: true } },
 ]
 
 export const asyncRoutes: RouteRecordRaw[] = [
   {
     path: '/',
     component: Layout,
-    redirect: 'dashboard',
+    redirect: '/dashboard',
     meta: { title: '首页', icon: 'House' },
     children: [
       {

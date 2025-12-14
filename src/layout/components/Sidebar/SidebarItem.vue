@@ -5,7 +5,12 @@
       <span>{{ item.meta?.title }}</span>
     </template>
 
-    <SidebarItem v-for="child in visibleChildren" :key="child.path" :item="child" :base-path="resolvedPath" />
+    <SidebarItem
+      v-for="child in visibleChildren"
+      :key="child.path"
+      :item="child"
+      :base-path="resolvedPath"
+    />
   </el-sub-menu>
 
   <el-menu-item v-else :index="resolvedPath">
@@ -27,9 +32,7 @@ interface Props {
 const props = defineProps<Props>()
 
 const visibleChildren = computed(() =>
-  (props.item.children || []).filter(
-    (child: any) => !child.meta?.hidden
-  )
+  (props.item.children || []).filter((child: any) => !child.meta?.hidden),
 )
 
 const hasChildren = computed(() => visibleChildren.value.length > 0)
@@ -43,9 +46,7 @@ const resolvedPath = computed(() => {
 
 const IconComp = computed(() => {
   const iconName = props.item.meta?.icon as string | undefined
-  return iconName && (ElIcons as any)[iconName]
-    ? (ElIcons as any)[iconName]
-    : null
+  return iconName && (ElIcons as any)[iconName] ? (ElIcons as any)[iconName] : null
 })
 </script>
 

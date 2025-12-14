@@ -1,9 +1,8 @@
 import axios from 'axios'
-import { ElMessage } from 'element-plus'
 
 const service = axios.create({
-  baseURL: 'http://localhost:8181/api',
-  // baseURL: 'https://api.meatsuger.top/api',
+  // baseURL: 'http://localhost:8181/api',
+  baseURL: 'https://api.meatsuger.top/api',
   withCredentials: true,
   timeout: 12000,
 })

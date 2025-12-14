@@ -4,9 +4,15 @@
       <span class="logo-text">IoT Admin</span>
     </div>
     <el-scrollbar height="calc(100vh - 56px)">
-      <el-menu :default-active="activeMenu" :collapse="appStore.sidebarCollapsed" router
-        class="el-menu-vertical" background-color="#001529" text-color="#bfcbd9" active-text-color="#ffd04b"
-       >
+      <el-menu
+        :default-active="activeMenu"
+        :collapse="appStore.sidebarCollapsed"
+        router
+        class="el-menu-vertical"
+        background-color="#001529"
+        text-color="#bfcbd9"
+        active-text-color="#ffd04b"
+      >
         <SidebarItem v-for="route in menuRoutes" :key="route.path" :item="route" />
       </el-menu>
     </el-scrollbar>

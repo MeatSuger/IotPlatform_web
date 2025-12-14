@@ -1,42 +1,47 @@
-# IotPlatform_web
+# Font (Web Frontend)
 
-This template should help get you started developing with Vue 3 in Vite.
+Vite + Vue 3 + TypeScript 前端应用。
 
-## Recommended IDE Setup
+项目结构
 
-[VS Code](https://code.visualstudio.com/) + [Vue (Official)](https://marketplace.visualstudio.com/items?itemName=Vue.volar) (and disable Vetur).
+- `package.json`：依赖与脚本
+- `vite.config.ts`：开发与构建配置（含代理）
+- `src/`：源码
+  - `main.ts` / `App.vue`：入口与根组件
+  - `router/`：路由
+  - `stores/`：Pinia 状态管理
+  - `services/`：接口封装（如 `auth.ts`）
+  - `utils/request.ts`：HTTP 请求封装
+  - `views/`：页面（如 `LoginPage.vue`）
 
-## Recommended Browser Setup
+环境要求
 
-- Chromium-based browsers (Chrome, Edge, Brave, etc.):
-  - [Vue.js devtools](https://chromewebstore.google.com/detail/vuejs-devtools/nhdogjmejiglipccpnnnanhbledajbpd) 
-  - [Turn on Custom Object Formatter in Chrome DevTools](http://bit.ly/object-formatters)
-- Firefox:
-  - [Vue.js devtools](https://addons.mozilla.org/en-US/firefox/addon/vue-js-devtools/)
-  - [Turn on Custom Object Formatter in Firefox DevTools](https://fxdx.dev/firefox-devtools-custom-object-formatters/)
+- Node.js 18+（建议）
+- npm / pnpm / yarn（任选其一）
 
-## Type Support for `.vue` Imports in TS
+开发与运行
 
-TypeScript cannot handle type information for `.vue` imports by default, so we replace the `tsc` CLI with `vue-tsc` for type checking. In editors, we need [Volar](https://marketplace.visualstudio.com/items?itemName=Vue.volar) to make the TypeScript language service aware of `.vue` types.
-
-## Customize configuration
-
-See [Vite Configuration Reference](https://vite.dev/config/).
-
-## Project Setup
-
-```sh
+```powershell
+cd .\font
+node -v
 npm install
-```
-
-### Compile and Hot-Reload for Development
-
-```sh
 npm run dev
 ```
 
-### Type-Check, Compile and Minify for Production
+构建与预览
 
-```sh
+```powershell
 npm run build
+npm run preview
 ```
+
+环境变量
+
+- 如需区分环境，请添加 `.env.development` / `.env.production` 等文件，并在代码中通过 `import.meta.env` 使用
+- 若与后端联调，请在 `vite.config.ts` 中配置代理到后端地址
+
+常见问题
+
+- 跨域：确保后端 CORS 策略允许前端域名或使用代理
+- 接口地址：修改 `utils/request.ts` 或环境变量以匹配后端地址
+- 依赖问题：删除 `node_modules` 并重新 `npm install`

@@ -11,8 +11,9 @@ export interface LoginData {
 }
 
 export async function login({ account, passwd }: LoginPayload): Promise<LoginData> {
-  const res = await request.post('/user/login', null, {
-    params: { account, passwd },
+  const res = await request.post('/user/login', {
+    account,
+    passwd,
   })
   const data: LoginData = res.data?.data || {}
   if (!data?.tokenValue) {

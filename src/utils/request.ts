@@ -9,13 +9,13 @@ const service = axios.create({
 
 service.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('token') || localStorage.getItem('satoken')
-    if (token) {
-      config.headers = config.headers || {}
-      config.headers.Authorization = `${token}`
-    }
-    // 避免浏览器/中间层缓存导致 304 返回空体
-    config.headers = config.headers || {}
+    // const token = localStorage.getItem('token') || localStorage.getItem('satoken')
+    // if (token) {
+    //   config.headers = config.headers || {}
+    //   config.headers.Authorization = `${token}`
+    // }
+    // // 避免浏览器/中间层缓存导致 304 返回空体
+    // config.headers = config.headers || {}
     config.headers['Cache-Control'] = 'no-cache'
     config.headers.Pragma = 'no-cache'
     return config

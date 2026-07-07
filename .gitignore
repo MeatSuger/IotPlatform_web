@@ -4,13 +4,32 @@ dist-*
 .eslintcache
 .stylelintcache
 *.tsbuildinfo
+
+# env
+.env
 .env.local
 .env.*.local
+.env.test
+
+# IDE
 .vscode
 .idea
+*.code-workspace
 .DS_Store
 Thumbs.db
+
+# logs
 *.log
+
+# AI
 .claude
 skills
+AGENTS.md
+CLAUDE.md
+
+# auto-generated
+**/auto-imports.d.ts
+**/components.d.ts
+
+# misc
 coverage

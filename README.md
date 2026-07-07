@@ -1,47 +1,61 @@
-# Font (Web Frontend)
+**中文** | [English](./README.EN.md)
+<a href="https://fantastic-admin.hurui.me" target="_blank"><img src="https://fantastic-admin.hurui.me/logo.svg" align="right" height="80" alt="logo" /></a>
 
-Vite + Vue 3 + TypeScript 前端应用。
+# Fantastic-admin
 
-项目结构
+面向 **AI** 的管理系统框架
 
-- `package.json`：依赖与脚本
-- `vite.config.ts`：开发与构建配置（含代理）
-- `src/`：源码
-  - `main.ts` / `App.vue`：入口与根组件
-  - `router/`：路由
-  - `stores/`：Pinia 状态管理
-  - `services/`：接口封装（如 `auth.ts`）
-  - `utils/request.ts`：HTTP 请求封装
-  - `views/`：页面（如 `LoginPage.vue`）
+<p>
+  <a href="https://fantastic-admin.hurui.me" target="_blank">官网</a>
+  <span>&nbsp;|&nbsp;</span>
+  <a href="https://fantastic-admin.pages.dev" target="_blank">备用地址</a>
+</p>
 
-环境要求
+<p>
+  <a href="###"><img src="https://img.shields.io/github/license/fantastic-admin/basic?label=%E5%BC%80%E6%BA%90%E5%8D%8F%E8%AE%AE&style=flat-square" alt="" /></a>
+  <a href="https://github.com/fantastic-admin/basic/releases" target="_blank"><img src="https://img.shields.io/github/v/release/fantastic-admin/basic?label=%E5%BD%93%E5%89%8D%E7%89%88%E6%9C%AC&style=flat-square" alt="" /></a>
+</p>
 
-- Node.js 18+（建议）
-- npm / pnpm / yarn（任选其一）
+![hero](https://fantastic-admin.hurui.me/hero_preview.png)
 
-开发与运行
+## 特点
 
-```powershell
-cd .\font
-node -v
-npm install
-npm run dev
-```
+> 部分为专业版能力
 
-构建与预览
+- AI 友好的工程底座，内置多个 Skills
+- 一流的技术栈：Vue 3.6 / Vite 8 / Pinia / UnoCSS / VueUse / TypeScript / ESLint / Stylelint / ...
+- 自由选择喜爱的三方 UI 库
+- 18 套默认主题方案且可扩展，给不同行业提供专属品牌气质
+- 7 款导航菜单模式，匹配产品发展的各个阶段
+- 精细可控的页面保活策略
+- 全方位权限验证
+- 国际化、RTL支持
+- 19 处预留插槽，灵活扩展产品内容
 
-```powershell
-npm run build
-npm run preview
-```
+## 下载
 
-环境变量
+> 本仓库为基础版
 
-- 如需区分环境，请添加 `.env.development` / `.env.production` 等文件，并在代码中通过 `import.meta.env` 使用
-- 若与后端联调，请在 `vite.config.ts` 中配置代理到后端地址
+直接拉取源码可能会包含未发布的内容，推荐去 [Github Releases](https://github.com/fantastic-admin/basic/releases) 页面下载稳定版本的压缩包。
 
-常见问题
+## 支持
 
-- 跨域：确保后端 CORS 策略允许前端域名或使用代理
-- 接口地址：修改 `utils/request.ts` 或环境变量以匹配后端地址
-- 依赖问题：删除 `node_modules` 并重新 `npm install`
+如果觉得 Fantastic-admin 这个框架不错，或者已经在使用了，希望你可以在 **Github** / **Gitee** / **GitCode** 帮我点个 ⭐ ，这将对本产品的推广有极大帮助。
+
+[![star](https://img.shields.io/github/stars/fantastic-admin/basic?style=social)](https://github.com/fantastic-admin/basic)
+
+[![star](https://gitee.com/fantastic-admin/basic/badge/star.svg?theme=dark)](https://gitee.com/fantastic-admin/basic)
+
+[![star](https://atomgit.com/fantastic-admin/basic/star/badge.svg)](https://atomgit.com/fantastic-admin/basic)
+
+<details>
+<summary>Github Stars 曲线</summary>
+
+[![Stargazers over time](https://starchart.cc/fantastic-admin/basic.svg)](https://starchart.cc/fantastic-admin/basic)
+</details>
+
+## 生态
+
+- [`Fantastic-startkit`](https://hooray.github.io/fantastic-startkit/) - 简单好用的 Vue3 项目启动套件
+- [`Fantastic-mobile`](https://fantastic-mobile.hurui.me/) - 让你的 H5 项目拥有稳固的工程底座
+- [`One-step Console`](https://one-step-admin.hurui.me) - 像导播一样编排你的工作现场

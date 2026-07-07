@@ -3,14 +3,14 @@
     <h2 class="title">欢迎登录</h2>
     <el-form
       ref="formRef"
-      :model="userStore.loginData"
+      :model="loginForm"
       :rules="rules"
       label-width="0"
       @submit.prevent
     >
       <el-form-item prop="account">
         <el-input
-          v-model="userStore.loginData.account"
+          v-model="loginForm.account"
           placeholder="用户名"
           clearable
           autocomplete="username"
@@ -18,7 +18,7 @@
       </el-form-item>
       <el-form-item prop="passwd">
         <el-input
-          v-model="userStore.loginData.passwd"
+          v-model="loginForm.passwd"
           placeholder="密码"
           clearable
           show-password
@@ -43,17 +43,22 @@
 </template>
 
 <script setup lang="ts" name="LoginPage">
-import { ref } from 'vue'
+import { reactive, ref } from 'vue'
 import { useUserStore } from '@/stores/user'
 import { useRouter } from 'vue-router'
 import type { FormInstance, FormRules } from 'element-plus'
-import { login as loginApi } from '@/services/auth'
 
 const router = useRouter()
 const userStore = useUserStore()
 const loading = ref(false)
 const formRef = ref<FormInstance>()
-const rules = ref<FormRules<typeof userStore.loginData>>({
+
+const loginForm = reactive({
+  account: '',
+  passwd: '',
+})
+
+const rules = ref<FormRules<typeof loginForm>>({
   account: [{ required: true, message: '用户名不能为空', trigger: 'blur' }],
   passwd: [{ required: true, message: '密码不能为空', trigger: 'blur' }],
 })
@@ -63,19 +68,17 @@ const onSubmit = () => {
   formRef.value.validate(async (valid) => {
     if (!valid) return
     loading.value = true
-    loginApi(userStore.loginData)
-      .then((data) => {
-        userStore.setToken(data.tokenValue ?? '')
-        ElMessage.success('登录成功')
-        router.push('dashboard')
-      })
-      .catch((err) => {
-        console.error('登录失败', err)
-        ElMessage.error(err.response?.data?.message || '登录失败')
-      })
-      .finally(() => {
-        loading.value = false
-      })
+    try {
+      await userStore.login({ account: loginForm.account, passwd: loginForm.passwd })
+      ElMessage.success('登录成功')
+      const redirect = (router.currentRoute.value.query.redirect as string) || '/dashboard'
+      router.push(redirect)
+    } catch (err: any) {
+      console.error('登录失败', err)
+      ElMessage.error(err.response?.data?.message || err.message || '登录失败')
+    } finally {
+      loading.value = false
+    }
   })
 }
 </script>

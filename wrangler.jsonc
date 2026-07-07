@@ -1,0 +1,6 @@
+{
+  "$schema": "https://raw.githubusercontent.com/cloudflare/workers-sdk/main/packages/wrangler/config-schema.json",
+  "name": "iotplatform-web",
+  "pages_build_output_dir": "apps/core-element-plus/dist",
+  "compatibility_date": "2025-07-08"
+}

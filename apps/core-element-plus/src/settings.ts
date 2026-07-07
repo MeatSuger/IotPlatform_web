@@ -17,6 +17,9 @@ export default setSettings({
       company: 'IoT Admin',
     },
   },
+  theme: {
+    colorScheme: '',
+  },
   menu: {
     mode: 'single',
   },

@@ -45,7 +45,10 @@ export default defineConfig(({ mode, command }) => {
               if (id.includes('/@vueuse/') || id.includes('/vee-validate/') || id.includes('/zod/') || id.includes('/reka-ui/')) {
                 return 'vue-libs'
               }
-              if (id.includes('/element-plus/es/utils/') || id.includes('/element-plus/es/hooks/') || id.includes('/element-plus/es/constants/') || id.includes('/element-plus/es/plugin/') || id.includes('/element-plus/es/locale/')) {
+              if (id.includes('/element-plus/es/components/')) {
+                return 'el-ui'
+              }
+              if (id.includes('/element-plus/') && (id.includes('/es/utils/') || id.includes('/es/hooks/') || id.includes('/es/constants/') || id.includes('/es/plugin/') || id.includes('/es/locale/') || id.includes('/es/directives/'))) {
                 return 'el-shared'
               }
               if (id.includes('/element-plus/theme-chalk/')) {

@@ -1,52 +1,85 @@
-// stores/user.ts
 import { defineStore } from 'pinia'
-import { reactive, ref } from 'vue'
-import { login as loginApi, type LoginPayload } from '@/services/auth'
-
-const TOKEN_KEY = 'token'
+import { ref, computed } from 'vue'
+import { login as loginApi, getUserInfo as getUserInfoApi, type LoginPayload, type UserInfo } from '@/services/auth'
+import { setToken, getToken, removeToken } from '@/utils/auth'
+import { usePermissionStore } from '@/stores/permission'
+import router from '@/router'
 
 export const useUserStore = defineStore('user', () => {
-  const loginData = reactive({
-    account: '',
-    passwd: '',
-    saToken: '',
-  })
+  // ---- state ----
+  const token = ref<string>(getToken())
+  const userInfo = ref<UserInfo>({})
+  const roles = ref<string[]>([])
+  const permissions = ref<string[]>([])
 
-  const token = ref<string>(localStorage.getItem(TOKEN_KEY) || '')
+  // ---- getters ----
+  const hasUserInfo = computed(() => Object.keys(userInfo.value).length > 0)
+  const name = computed(() => userInfo.value.name || userInfo.value.account || '用户')
+  const avatar = computed(() => userInfo.value.avatar || '')
 
-  const setToken = (val: string) => {
-    token.value = val
-    loginData.saToken = val
-    try {
-      localStorage.setItem(TOKEN_KEY, val)
-    } catch {}
-  }
+  // ---- actions ----
 
-  const clearToken = () => {
-    token.value = ''
-    loginData.saToken = ''
-    try {
-      localStorage.removeItem(TOKEN_KEY)
-      localStorage.removeItem('satoken')
-      localStorage.removeItem('token_bearer')
-    } catch {}
-  }
-
-  const setLoginData = (account: string, passwd: string, saToken: string) => {
-    loginData.account = account
-    loginData.passwd = passwd
-    setToken(saToken)
-  }
-
-  const login = async (payload: LoginPayload) => {
+  /** 登录：调 API → 存 token → 获取用户信息 */
+  async function login(payload: LoginPayload) {
     const data = await loginApi(payload)
-    setToken(data.tokenValue ?? '')
+    const tokenValue = data.tokenValue ?? ''
+    setToken(tokenValue)
+    token.value = tokenValue
+    // 登录成功后获取用户信息（调用 /isLogin）
+    await getUserInfo()
     return data
   }
 
-  const logout = () => {
-    clearToken()
+  /** 获取用户信息（调用 /isLogin） */
+  async function getUserInfo() {
+    const info = await getUserInfoApi()
+    userInfo.value = info
+    roles.value = info.roles || []
+    permissions.value = info.permissions || []
+    return info
   }
 
-  return { loginData, token, setLoginData, setToken, clearToken, login, logout }
+  /** 登出：清除 token 和用户信息 */
+  async function logout() {
+    fedLogOut()
+  }
+
+  /** 仅前端登出 */
+  function fedLogOut() {
+    removeToken()
+    token.value = ''
+    userInfo.value = {}
+    roles.value = []
+    permissions.value = []
+    const permissionStore = usePermissionStore()
+    permissionStore.reset()
+    router.replace({ path: '/auth/login' })
+  }
+
+  /** 重置全部状态（用于 401 等场景） */
+  function resetState() {
+    removeToken()
+    token.value = ''
+    userInfo.value = {}
+    roles.value = []
+    permissions.value = []
+  }
+
+  return {
+    // state
+    token,
+    userInfo,
+    roles,
+    permissions,
+    // getters
+    hasUserInfo,
+    name,
+    avatar,
+    // actions
+    login,
+    getUserInfo,
+    logout,
+    fedLogOut,
+    resetState,
+  }
 })

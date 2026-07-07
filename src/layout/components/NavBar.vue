@@ -28,29 +28,24 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute } from 'vue-router'
 import { useAppStore } from '@/stores/app'
 import { useUserStore } from '@/stores/user'
-import { usePermissionStore } from '@/stores/permission'
 import { Fold, Expand, User } from '@element-plus/icons-vue'
 
 const route = useRoute()
-const router = useRouter()
 const appStore = useAppStore()
 const userStore = useUserStore()
-const permissionStore = usePermissionStore()
 
 const breadcrumb = computed(() => route.matched.filter((r) => r.meta?.title))
-const username = computed(() => userStore.loginData.account || '用户')
+const username = computed(() => userStore.name)
 
 const toggle = () => {
   appStore.toggleSidebar()
 }
 
-const onLogout = () => {
-  userStore.logout()
-  permissionStore.reset()
-  router.replace('/auth/login')
+const onLogout = async () => {
+  await userStore.logout()
 }
 </script>
 

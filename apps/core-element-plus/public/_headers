@@ -1,0 +1,21 @@
+# CDN 缓存策略 — Cloudflare Pages / Workers
+# 所有静态资源都带 content hash，可安全地永久缓存
+
+# JS/CSS/字体/图片 — 带 hash，永久缓存
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# SVG 雪碧图 — 带 hash，永久缓存
+/assets/spritemap.*.svg
+  Cache-Control: public, max-age=31536000, immutable
+
+# 图标和升级页面资源 — 不常变，短期缓存
+/browser_upgrade/*
+  Cache-Control: public, max-age=604800
+
+/favicon.svg
+  Cache-Control: public, max-age=604800
+
+# HTML 入口 — 每次都验证，但允许 CDN 缓存
+/index.html
+  Cache-Control: public, max-age=0, must-revalidate

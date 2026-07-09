@@ -1,7 +1,6 @@
 node_modules
 dist
 dist-*
-.eslintcache
 .stylelintcache
 *.tsbuildinfo
 
@@ -33,3 +32,4 @@ CLAUDE.md
 
 # misc
 coverage
+.eslintcache

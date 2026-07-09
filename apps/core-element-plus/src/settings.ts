@@ -23,9 +23,6 @@ export default setSettings({
   menu: {
     mode: 'single',
   },
-  topbar: {
-    tabbar: true,
-  },
   toolbar: {
     fullscreen: true,
     pageReload: true,

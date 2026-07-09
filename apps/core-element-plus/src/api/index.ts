@@ -1,9 +1,8 @@
 import axios from 'axios'
-// import qs from 'qs'
 
 // 请求重试配置
-const MAX_RETRY_COUNT = 3 // 最大重试次数
-const RETRY_DELAY = 1000 // 重试延迟时间（毫秒）
+const MAX_RETRY_COUNT = 3
+const RETRY_DELAY = 1000
 
 // 扩展 AxiosRequestConfig 类型
 declare module 'axios' {
@@ -14,28 +13,46 @@ declare module 'axios' {
   }
 }
 
-const api = axios.create({
-  baseURL: (import.meta.env.DEV && import.meta.env.VITE_ENABLE_PROXY) ? '/proxy/' : import.meta.env.VITE_APP_API_BASEURL,
-  timeout: 1000 * 60,
-  responseType: 'json',
-  withCredentials: true,
-})
+/**
+ * 获取 baseURL
+ * - 开发模式 + 启用代理 → /proxy/
+ * - 其他情况 → 使用环境变量
+ */
+function getBaseURL(dataApi = false): string {
+  if (import.meta.env.DEV && import.meta.env.VITE_ENABLE_PROXY) {
+    return '/proxy/'
+  }
+  // 数据查询 API 走 Worker 相对路径（仅在设置了 VITE_DATA_API_BASEURL 时）
+  if (dataApi && import.meta.env.VITE_DATA_API_BASEURL) {
+    return import.meta.env.VITE_DATA_API_BASEURL
+  }
+  return import.meta.env.VITE_APP_API_BASEURL
+}
 
-api.interceptors.request.use(
-  (request) => {
-    // 全局拦截请求发送前提交的参数
+/**
+ * 创建 axios 实例的工厂函数
+ */
+function createApi(baseURL: string) {
+  const instance = axios.create({
+    baseURL,
+    timeout: 1000 * 60,
+    responseType: 'json',
+    withCredentials: true,
+  })
+
+  instance.interceptors.request.use((request) => {
     const appAccountStore = useAppAccountStore()
-    // 设置请求头
     if (request.headers) {
       request.headers['Accept-Language'] = 'zh-CN'
       if (appAccountStore.isLogin) {
-        // IoT 后端使用 Authorization 头
         request.headers.Authorization = appAccountStore.token
       }
     }
     return request
-  },
-)
+  })
+
+  return instance
+}
 
 // 处理错误信息的函数
 function handleError(error: any) {
@@ -50,70 +67,71 @@ function handleError(error: any) {
   return Promise.reject(error)
 }
 
-api.interceptors.response.use(
-  (response) => {
-    /**
-     * 适配 IoT 后端返回的数据格式
-     * IoT 后端格式：{ code: 200, data: object, message: string }
-     * code === 200 表示请求成功
-     * code === 401 表示需要重新登录
-     */
-    const res = response.data
-    if (typeof res === 'object' && res !== null) {
-      // IoT 后端格式：{ code, data, message }
-      if ('code' in res) {
-        if (res.code === 200) {
-          return Promise.resolve(res)
+/**
+ * 为实例添加响应拦截器（共享逻辑）
+ */
+function addResponseInterceptor(instance: ReturnType<typeof axios.create>) {
+  instance.interceptors.response.use(
+    (response) => {
+      const res = response.data
+      if (typeof res === 'object' && res !== null) {
+        if ('code' in res) {
+          if (res.code === 200) {
+            return Promise.resolve(res)
+          }
+          else if (res.code === 401) {
+            useAppAccountStore().requestLogout()
+            return Promise.reject(res)
+          }
+          else {
+            useFaToast().error('Error', {
+              description: res.message || '请求失败',
+            })
+            return Promise.reject(res)
+          }
         }
-        else if (res.code === 401) {
+        if (res.status === 1) {
+          if (res.error) {
+            useFaToast().warning('Warning', {
+              description: res.error,
+            })
+            return Promise.reject(res)
+          }
+          return Promise.resolve(res.data)
+        }
+        else if (res.status === 0) {
           useAppAccountStore().requestLogout()
           return Promise.reject(res)
         }
-        else {
-          useFaToast().error('Error', {
-            description: res.message || '请求失败',
-          })
-          return Promise.reject(res)
-        }
+        return Promise.resolve(res)
       }
-      // 兼容旧格式：{ status: 1 | 0, error: string, data: object }
-      if (res.status === 1) {
-        if (res.error) {
-          useFaToast().warning('Warning', {
-            description: res.error,
-          })
-          return Promise.reject(res)
-        }
-        return Promise.resolve(res.data)
+      return Promise.reject(res)
+    },
+    async (error) => {
+      const config = error.config
+      if (!config || !config.retry) {
+        return handleError(error)
       }
-      else if (res.status === 0) {
-        useAppAccountStore().requestLogout()
-        return Promise.reject(res)
+      config.retryCount = config.retryCount || 0
+      if (config.retryCount >= MAX_RETRY_COUNT) {
+        return handleError(error)
       }
-      return Promise.resolve(res)
-    }
-    return Promise.reject(res)
-  },
-  async (error) => {
-    // 获取请求配置
-    const config = error.config
-    // 如果配置不存在或未启用重试，则直接处理错误
-    if (!config || !config.retry) {
-      return handleError(error)
-    }
-    // 设置重试次数
-    config.retryCount = config.retryCount || 0
-    // 判断是否超过重试次数
-    if (config.retryCount >= MAX_RETRY_COUNT) {
-      return handleError(error)
-    }
-    // 重试次数自增
-    config.retryCount += 1
-    // 延迟重试
-    await new Promise(resolve => setTimeout(resolve, RETRY_DELAY))
-    // 重新发起请求
-    return api(config)
-  },
-)
+      config.retryCount += 1
+      await new Promise(resolve => setTimeout(resolve, RETRY_DELAY))
+      return instance(config)
+    },
+  )
+}
 
+// ─── 导出两个 axios 实例 ──────────────────────────────────
+
+/** 通用 API 实例 — 直连后端（登录、设备列表、路由等） */
+const api = createApi(getBaseURL(false))
+addResponseInterceptor(api)
+
+/** 数据查询 API 实例 — 走 Worker 代理缓存（遥测数据查询） */
+const apiData = createApi(getBaseURL(true))
+addResponseInterceptor(apiData)
+
+export { apiData }
 export default api

@@ -1,7 +1,7 @@
-import { apiData } from '../../index'
+import api from '../../index'
 
 export const dataApi = {
-  // 获取设备监测数据列表（通过 Cloudflare Worker 代理 + 缓存）
+  // 获取设备监测数据列表
   getList: (deviceId: string, params?: Record<string, any>) =>
-    apiData.get(`/data/${encodeURIComponent(deviceId)}/Data/list`, { params }),
+    api.get(`/data/${encodeURIComponent(deviceId)}/Data/list`, { params }),
 }

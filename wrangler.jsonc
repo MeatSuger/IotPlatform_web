@@ -1,34 +1,9 @@
 {
   "name": "iotplatform-web",
-  "main": "./apps/core-element-plus/worker/index.ts",
   "compatibility_date": "2025-12-12",
-  "compatibility_flags": [
-    "nodejs_compat"
-  ],
   "workers_dev": false,
   "preview_urls": false,
   "assets": {
     "directory": "./apps/core-element-plus/dist"
-  },
-  "vars": {
-    "API_BASE_URL": "https://api.meatsuger.top/api"
-  },
-  "hyperdrive": [
-    {
-      "binding": "HYPERDRIVE",
-      "id": "290d8b2523b7484f95b182fe50d29492"
-    }
-  ],
-  "routes": [
-    {
-      "pattern": "iot.meatsuger.top",
-      "zone_name": "meatsuger.top"
-    }
-  ],
-  "observability": {
-    "logs": {
-      "enabled": false,
-      "invocation_logs": true
-    }
   }
 }

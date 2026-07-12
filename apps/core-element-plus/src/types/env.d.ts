@@ -25,7 +25,6 @@ interface ImportMetaEnv {
    * Website title
    */
   readonly VITE_APP_TITLE: string
-  readonly VITE_DATA_API_BASEURL: string
   /**
    * 启用代理
    * Enable proxy

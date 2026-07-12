@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useElementSize, useWindowSize } from '@vueuse/core'
 import { LineChart } from 'echarts/charts'
 import {
   GridComponent,
@@ -8,7 +9,7 @@ import {
 } from 'echarts/components'
 import { use } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, useTemplateRef, watch } from 'vue'
 import VChart from 'vue-echarts'
 import { onBeforeRouteUpdate, useRoute } from 'vue-router'
 import { dataApi } from '@/api/modules/iot/data'
@@ -152,6 +153,17 @@ const chartOption = computed(() => {
   }
 })
 
+// 自适应表格最大高度，避免页面级滚动
+const { height: windowHeight } = useWindowSize()
+const headerCardRef = useTemplateRef('headerCardRef')
+const { height: cardHeaderHeight } = useElementSize(headerCardRef)
+const tableMaxHeight = computed(() => {
+  // 图表高度 280px + margin-bottom 12px + 分页高度约 50px + 卡片内边距约 40px + FaPageMain 边距 32px
+  // 布局 overhead（顶部 slots + header + topbar + copyright 等）约 200px
+  const overhead = 280 + 12 + 50 + 40 + 32 + 200 + (cardHeaderHeight.value || 60)
+  return Math.max(150, windowHeight.value - overhead)
+})
+
 async function onQuery(silent = false) {
   if (!query.deviceId) {
     return
@@ -212,58 +224,62 @@ onMounted(() => {
 </script>
 
 <template>
-  <FaPageMain>
-    <el-card>
+  <FaPageMain class="h-[calc(100%-32px)]!">
+    <el-card class="h-full!">
       <template #header>
-        <el-form :model="query" :inline="true">
-          <el-form-item label="日期范围">
-            <el-date-picker
-              v-model="dateRange"
-              type="datetimerange"
-              range-separator="至"
-              start-placeholder="开始日期"
-              end-placeholder="结束日期"
-              :shortcuts="shortcuts"
-            />
-          </el-form-item>
-          <el-form-item label="设备 ID">
-            <el-input v-model="query.deviceId" placeholder="设备ID" clearable />
-          </el-form-item>
-          <el-form-item label="关键词">
-            <el-input v-model="query.keyword" placeholder="" clearable />
-          </el-form-item>
-          <el-form-item label="">
-            <el-button type="primary" :loading="loading" @click="onQuery()">
-              查询
-            </el-button>
-          </el-form-item>
-          <el-form-item label="">
-            <el-button type="text">
-              导出
-            </el-button>
-          </el-form-item>
-        </el-form>
+        <div ref="headerCardRef">
+          <el-form :model="query" :inline="true">
+            <el-form-item label="日期范围">
+              <el-date-picker
+                v-model="dateRange"
+                type="datetimerange"
+                range-separator="至"
+                start-placeholder="开始日期"
+                end-placeholder="结束日期"
+                :shortcuts="shortcuts"
+              />
+            </el-form-item>
+            <el-form-item label="设备 ID">
+              <el-input v-model="query.deviceId" placeholder="设备ID" clearable />
+            </el-form-item>
+            <el-form-item label="关键词">
+              <el-input v-model="query.keyword" placeholder="" clearable />
+            </el-form-item>
+            <el-form-item label="">
+              <el-button type="primary" :loading="loading" @click="onQuery()">
+                查询
+              </el-button>
+            </el-form-item>
+            <el-form-item label="">
+              <el-button type="text">
+                导出
+              </el-button>
+            </el-form-item>
+          </el-form>
+        </div>
       </template>
 
-      <div>
+      <div class="flex flex-1 flex-col min-h-0">
         <!-- 折线图 -->
-        <VChart class="chart" :option="chartOption" autoresize />
+        <VChart class="chart shrink-0" :option="chartOption" autoresize />
 
         <!-- 数据表格 -->
-        <el-table
-          :data="tablePageData"
+        <div class="table-wrapper flex-1 min-h-0">
+          <el-table
+            :data="tablePageData"
+            stripe
+            border
+            :max-height="tableMaxHeight"
+            :loading="loading"
+          >
+            <el-table-column prop="timestamp" label="时间" show-overflow-tooltip align="center" />
+            <el-table-column prop="name" label="名称" show-overflow-tooltip align="center" />
+            <el-table-column prop="type" label="类型" show-overflow-tooltip align="center" />
+            <el-table-column prop="value" label="数值" show-overflow-tooltip align="center" />
+          </el-table>
+        </div>
 
-          stripe border
-          max-height="450px"
-          :loading="loading"
-        >
-          <el-table-column prop="timestamp" label="时间" show-overflow-tooltip align="center" />
-          <el-table-column prop="name" label="名称" show-overflow-tooltip align="center" />
-          <el-table-column prop="type" label="类型" show-overflow-tooltip align="center" />
-          <el-table-column prop="value" label="数值" show-overflow-tooltip align="center" />
-        </el-table>
-
-        <div class="pagination-wrap">
+        <div class="pagination-wrap shrink-0">
           <el-pagination
             layout="prev, pager, next, sizes, total"
             :total="tableTotal"
@@ -292,5 +308,26 @@ onMounted(() => {
   width: 100%;
   height: 280px;
   margin-bottom: 12px;
+}
+
+/* 表格容器：填满剩余空间 */
+.table-wrapper {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* 确保 el-card 使用 flex 布局填满容器 */
+:deep(.el-card) {
+  display: flex;
+  flex-direction: column;
+}
+
+:deep(.el-card__body) {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
 }
 </style>

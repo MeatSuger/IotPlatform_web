@@ -1,10 +1,11 @@
 <script lang="ts" setup>
 import { Bell, Close, Odometer, Refrigerator } from '@element-plus/icons-vue'
+import { useWindowSize } from '@vueuse/core'
 import { LineChart } from 'echarts/charts'
 import { GridComponent, LegendComponent, TooltipComponent } from 'echarts/components'
 import { use } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
-import { markRaw, ref } from 'vue'
+import { computed, markRaw, ref } from 'vue'
 import VChart from 'vue-echarts'
 
 defineOptions({ name: 'Dashboard' })
@@ -24,6 +25,12 @@ const recentData = ref([
   { device: '传感器 C', value: '电量 78%' },
   { device: '传感器 D', value: '温度 24℃' },
 ])
+
+// 自适应表格最大高度（与左侧图表高度对齐：300px - 卡片头部 ~40px）
+const { height: windowHeight } = useWindowSize()
+const recentTableMaxHeight = computed(() => {
+  return Math.max(100, Math.min(300, windowHeight.value - 700))
+})
 
 const lineChartOptions = ref({
   tooltip: { trigger: 'axis' },
@@ -94,7 +101,7 @@ const lineChartOptions = ref({
               最新上报
             </div>
           </template>
-          <el-table :data="recentData" stripe border size="small" :show-header="false">
+          <el-table :data="recentData" stripe border size="small" :show-header="false" :max-height="recentTableMaxHeight">
             <el-table-column prop="device" />
             <el-table-column prop="value" />
           </el-table>

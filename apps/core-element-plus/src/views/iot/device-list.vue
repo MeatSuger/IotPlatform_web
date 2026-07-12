@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onErrorCaptured, onMounted, reactive, ref } from 'vue'
+import { useElementSize, useWindowSize } from '@vueuse/core'
+import { computed, onBeforeUnmount, onErrorCaptured, onMounted, reactive, ref, useTemplateRef } from 'vue'
 import { onBeforeRouteUpdate } from 'vue-router'
 import { deviceApi } from '@/api/modules/iot/device'
 
@@ -13,6 +14,16 @@ const query = reactive({
 
 const dynamicCols = ref<string[]>([])
 const tableData = ref<any[]>([])
+
+// 自适应表格最大高度，避免页面级滚动
+const { height: windowHeight } = useWindowSize()
+const headerCardRef = useTemplateRef('headerCardRef')
+const { height: cardHeaderHeight } = useElementSize(headerCardRef)
+const tableMaxHeight = computed(() => {
+  // FaPageMain 边距 32px + 内边距 32px + 分页 ~50px + 卡片内边距 ~40px + 布局 overhead ~200px
+  const overhead = 32 + 32 + 50 + 40 + 200 + (cardHeaderHeight.value || 60)
+  return Math.max(150, windowHeight.value - overhead)
+})
 
 onMounted(() => {
   loadColumns()
@@ -84,69 +95,74 @@ const shortcuts = [
 </script>
 
 <template>
-  <FaPageMain>
-    <el-card>
+  <FaPageMain class="h-[calc(100%-32px)]!">
+    <el-card class="h-full!">
       <template #header>
-        <el-form :model="query" :inline="true">
-          <el-form-item label="">
-            <el-button type="primary" @click="loadColumns">
-              加载列表
-            </el-button>
-          </el-form-item>
-          <el-form-item label="日期范围">
-            <el-date-picker
-              v-model="dateRange"
-              type="datetimerange"
-              range-separator="至"
-              start-placeholder="开始日期"
-              end-placeholder="结束日期"
-              :shortcuts="shortcuts"
-            />
-          </el-form-item>
-          <el-form-item label="设备名称">
-            <el-input v-model="query.devicename" placeholder="" clearable />
-          </el-form-item>
-          <el-form-item label="">
-            <el-button type="primary" @click="loadColumns">
-              查询
-            </el-button>
-          </el-form-item>
-          <el-form-item label="">
-            <el-button type="text">
-              导出
-            </el-button>
-          </el-form-item>
-        </el-form>
+        <div ref="headerCardRef">
+          <el-form :model="query" :inline="true">
+            <el-form-item label="">
+              <el-button type="primary" @click="loadColumns">
+                加载列表
+              </el-button>
+            </el-form-item>
+            <el-form-item label="日期范围">
+              <el-date-picker
+                v-model="dateRange"
+                type="datetimerange"
+                range-separator="至"
+                start-placeholder="开始日期"
+                end-placeholder="结束日期"
+                :shortcuts="shortcuts"
+              />
+            </el-form-item>
+            <el-form-item label="设备名称">
+              <el-input v-model="query.devicename" placeholder="" clearable />
+            </el-form-item>
+            <el-form-item label="">
+              <el-button type="primary" @click="loadColumns">
+                查询
+              </el-button>
+            </el-form-item>
+            <el-form-item label="">
+              <el-button type="text">
+                导出
+              </el-button>
+            </el-form-item>
+          </el-form>
+        </div>
       </template>
 
-      <div>
-        <el-table
-          :data="tableData"
-
-          stripe border
-          max-height="500px"
-          :default-sort="{ prop: 'id', order: 'descending' }"
-        >
-          <el-table-column
-            v-for="col in dynamicCols"
-            :key="col"
-            :prop="col"
-            :label="col"
-            show-overflow-tooltip
+      <div class="flex flex-1 flex-col min-h-0">
+        <!-- 数据表格 -->
+        <div class="table-wrapper flex-1 min-h-0">
+          <el-table
+            :data="tableData"
+            stripe
+            border
+            :max-height="tableMaxHeight"
+            :default-sort="{ prop: 'id', order: 'descending' }"
           >
-            <template #default="{ row }">
-              <template v-if="['deviceid'].includes(String(col).toLowerCase())">
-                <router-link :to="{ name: 'MonitorIndex', query: { deviceId: row[col] } }">
+            <el-table-column
+              v-for="col in dynamicCols"
+              :key="col"
+              :prop="col"
+              :label="col"
+              show-overflow-tooltip
+            >
+              <template #default="{ row }">
+                <template v-if="['deviceid'].includes(String(col).toLowerCase())">
+                  <router-link :to="{ name: 'MonitorIndex', query: { deviceId: row[col] } }">
+                    {{ row[col] ?? '' }}
+                  </router-link>
+                </template>
+                <template v-else>
                   {{ row[col] ?? '' }}
-                </router-link>
+                </template>
               </template>
-              <template v-else>
-                {{ row[col] ?? '' }}
-              </template>
-            </template>
-          </el-table-column>
-        </el-table>
-        <div class="pagination-wrap">
+            </el-table-column>
+          </el-table>
+        </div>
+        <div class="pagination-wrap shrink-0">
           <el-pagination layout="prev, pager, next" :total="50" />
         </div>
       </div>
@@ -161,5 +177,26 @@ const shortcuts = [
   justify-content: flex-end;
   width: 100%;
   padding: 8px 0;
+}
+
+/* 表格容器：填满剩余空间，处理水平溢出 */
+.table-wrapper {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* 确保 el-card 使用 flex 布局填满容器 */
+:deep(.el-card) {
+  display: flex;
+  flex-direction: column;
+}
+
+:deep(.el-card__body) {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
 }
 </style>

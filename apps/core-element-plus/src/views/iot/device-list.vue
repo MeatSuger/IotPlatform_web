@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useElementSize, useWindowSize } from '@vueuse/core'
-import { computed, onBeforeUnmount, onErrorCaptured, onMounted, reactive, ref, useTemplateRef } from 'vue'
-import { onBeforeRouteUpdate } from 'vue-router'
+import { computed, h, onBeforeUnmount, onErrorCaptured, onMounted, reactive, ref, useTemplateRef } from 'vue'
+import { onBeforeRouteUpdate, RouterLink } from 'vue-router'
 import { deviceApi } from '@/api/modules/iot/device'
 
 defineOptions({ name: 'DeviceList' })
@@ -12,15 +12,57 @@ const query = reactive({
   daterange: '',
 })
 
-const dynamicCols = ref<string[]>([])
 const tableData = ref<any[]>([])
 
-// 自适应表格最大高度，避免页面级滚动
+// 动态列定义 — 使用 cell 渲染函数避免动态 slot 类型问题
+const columns = ref<any[]>([])
+
+function formatTime(val: any): string {
+  if (!val) {
+    return '-'
+  }
+  const d = new Date(val)
+  if (Number.isNaN(d.getTime())) {
+    return String(val)
+  }
+  return d.toLocaleString()
+}
+
+const timeFieldPattern = /time|date|at$/
+
+function buildColumns(data: any[]) {
+  if (data.length === 0) {
+    columns.value = []
+    return
+  }
+  columns.value = Object.keys(data[0]).map((col) => {
+    const colItem: any = {
+      accessorKey: col,
+      header: col,
+    }
+    // 时间字段：用 cell 渲染格式化
+    if (timeFieldPattern.test(col.toLowerCase())) {
+      colItem.cell = ({ getValue }: { getValue: () => any }) => formatTime(getValue())
+    }
+    // deviceId 字段：渲染为链接
+    if (col.toLowerCase() === 'deviceid') {
+      colItem.cell = ({ getValue }: { getValue: () => any }) => {
+        const v = getValue()
+        return h(RouterLink, {
+          to: { name: 'MonitorIndex', query: { deviceId: v } },
+          class: 'text-primary cursor-pointer hover:underline',
+        }, () => v ?? '')
+      }
+    }
+    return colItem
+  })
+}
+
+// 自适应表格最大高度
 const { height: windowHeight } = useWindowSize()
 const headerCardRef = useTemplateRef('headerCardRef')
 const { height: cardHeaderHeight } = useElementSize(headerCardRef)
 const tableMaxHeight = computed(() => {
-  // FaPageMain 边距 32px + 内边距 32px + 分页 ~50px + 卡片内边距 ~40px + 布局 overhead ~200px
   const overhead = 32 + 32 + 50 + 40 + 200 + (cardHeaderHeight.value || 60)
   return Math.max(150, windowHeight.value - overhead)
 })
@@ -28,16 +70,13 @@ const tableMaxHeight = computed(() => {
 onMounted(() => {
   loadColumns()
 })
-
 onBeforeRouteUpdate((_to, _from, next) => {
   loadColumns()
   next()
 })
-
 onBeforeUnmount(() => {
   console.warn('[DeviceList] component is being unmounted')
 })
-
 onErrorCaptured((err) => {
   console.error('[DeviceList] render error:', err)
   return false
@@ -52,14 +91,14 @@ async function loadColumns() {
         ? res.data
         : []
     tableData.value = list
-    dynamicCols.value = list.length > 0 ? Object.keys(list[0]) : []
+    buildColumns(list)
   }
   catch (e: unknown) {
     console.error('[DeviceList] load failed', e)
     const msg = e instanceof Error ? e.message : String(e)
     useFaToast().error('加载失败', { description: msg })
-    dynamicCols.value = []
     tableData.value = []
+    columns.value = []
   }
 }
 
@@ -95,108 +134,59 @@ const shortcuts = [
 </script>
 
 <template>
-  <FaPageMain class="h-[calc(100%-32px)]!">
-    <el-card class="h-full!">
+  <FaPageMain class="!m-0 border-0! rounded-none! h-full! overflow-hidden!">
+    <FaCard class="flex flex-col h-full overflow-hidden">
       <template #header>
-        <div ref="headerCardRef">
-          <el-form :model="query" :inline="true">
-            <el-form-item label="">
-              <el-button type="primary" @click="loadColumns">
-                加载列表
-              </el-button>
-            </el-form-item>
-            <el-form-item label="日期范围">
-              <el-date-picker
-                v-model="dateRange"
-                type="datetimerange"
-                range-separator="至"
-                start-placeholder="开始日期"
-                end-placeholder="结束日期"
-                :shortcuts="shortcuts"
-              />
-            </el-form-item>
-            <el-form-item label="设备名称">
-              <el-input v-model="query.devicename" placeholder="" clearable />
-            </el-form-item>
-            <el-form-item label="">
-              <el-button type="primary" @click="loadColumns">
-                查询
-              </el-button>
-            </el-form-item>
-            <el-form-item label="">
-              <el-button type="text">
-                导出
-              </el-button>
-            </el-form-item>
-          </el-form>
+        <div ref="headerCardRef" class="flex flex-wrap gap-3 items-center">
+          <FaButton variant="default" size="sm" @click="loadColumns">
+            加载列表
+          </FaButton>
+          <el-date-picker
+            v-model="dateRange"
+            type="datetimerange"
+            range-separator="至"
+            start-placeholder="开始日期"
+            end-placeholder="结束日期"
+            :shortcuts="shortcuts"
+          />
+          <FaInput v-model="query.devicename" placeholder="设备名称" class="!w-200px" />
+          <FaButton variant="default" size="sm" @click="loadColumns">
+            查询
+          </FaButton>
+          <FaButton variant="ghost" size="sm">
+            导出
+          </FaButton>
         </div>
       </template>
 
       <div class="flex flex-1 flex-col min-h-0">
-        <!-- 数据表格 -->
-        <div class="table-wrapper flex-1 min-h-0">
-          <el-table
+        <div class="table-wrapper flex-1 min-h-0" :style="{ maxHeight: `${tableMaxHeight}px` }">
+          <FaTable
+            :columns="columns"
             :data="tableData"
             stripe
             border
-            :max-height="tableMaxHeight"
-            :default-sort="{ prop: 'id', order: 'descending' }"
-          >
-            <el-table-column
-              v-for="col in dynamicCols"
-              :key="col"
-              :prop="col"
-              :label="col"
-              show-overflow-tooltip
-            >
-              <template #default="{ row }">
-                <template v-if="['deviceid'].includes(String(col).toLowerCase())">
-                  <router-link :to="{ name: 'MonitorIndex', query: { deviceId: row[col] } }">
-                    {{ row[col] ?? '' }}
-                  </router-link>
-                </template>
-                <template v-else>
-                  {{ row[col] ?? '' }}
-                </template>
-              </template>
-            </el-table-column>
-          </el-table>
+          />
         </div>
         <div class="pagination-wrap shrink-0">
-          <el-pagination layout="prev, pager, next" :total="50" />
+          <FaPagination :page="1" :size="10" :total="50" />
         </div>
       </div>
-    </el-card>
+    </FaCard>
   </FaPageMain>
 </template>
 
 <style scoped>
 .pagination-wrap {
-  box-sizing: border-box;
   display: flex;
   justify-content: flex-end;
   width: 100%;
   padding: 8px 0;
 }
 
-/* 表格容器：填满剩余空间，处理水平溢出 */
 .table-wrapper {
   display: flex;
   flex-direction: column;
-  overflow: hidden;
-}
-
-/* 确保 el-card 使用 flex 布局填满容器 */
-:deep(.el-card) {
-  display: flex;
-  flex-direction: column;
-}
-
-:deep(.el-card__body) {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  min-height: 0;
   overflow: hidden;
 }
 </style>

@@ -65,6 +65,16 @@ const IotRoutes: RouteRecordMainRaw = {
             icon: 'i-ant-design:plus-circle-outlined',
           },
         },
+        {
+          path: 'control',
+          name: 'DeviceControl',
+          component: () => import('@/views/iot/device-control.vue'),
+          meta: {
+            title: '设备控制',
+            icon: 'i-ant-design:control-outlined',
+            keepAlive: true,
+          },
+        }
       ],
     },
     // 数据监控

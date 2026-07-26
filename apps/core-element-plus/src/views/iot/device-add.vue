@@ -29,6 +29,11 @@ const rules = reactive<FormRules<RuleForm>>({
   deviceType: [{ required: true, message: '请选择设备类型', trigger: 'change' }],
 })
 
+const deviceTypeOptions = [
+  { label: '温度(°C)', value: 'temperature' },
+  { label: '湿度(%RH)', value: 'humidity' },
+]
+
 async function onSubmit() {
   if (!formRef.value) {
     return
@@ -67,51 +72,41 @@ function onReset() {
 
 <template>
   <FaPageMain>
-    <el-card shadow="always" :body-style="{ padding: '20px' }">
-      <template #header>
-        <div>
-          <span>添加设备</span>
-        </div>
-      </template>
-      <el-row>
-        <el-col :span="12">
-          <el-form
-            ref="formRef"
-            :model="ruleForm"
-            :rules="rules"
-            label-width="120px"
-            size="large"
-            @submit.prevent="onSubmit"
-          >
-            <el-form-item label="设备名称" prop="deviceName">
-              <el-input v-model="ruleForm.deviceName" />
-            </el-form-item>
-            <el-form-item label="设备类型" prop="deviceType">
-              <el-select v-model="ruleForm.deviceType" placeholder="请选择设备类型">
-                <el-option label="温度(°C)" value="temperature" />
-                <el-option label="湿度(%RH)" value="humidity" />
-              </el-select>
-            </el-form-item>
-            <el-form-item label="固件版本">
-              <el-input v-model="ruleForm.firmwareVersion" />
-            </el-form-item>
-            <el-form-item label="IP 地址">
-              <el-input v-model="ruleForm.ipAddress" />
-            </el-form-item>
-            <el-form-item label="MAC 地址">
-              <el-input v-model="ruleForm.macAddress" />
-            </el-form-item>
-            <el-form-item>
-              <el-button type="primary" native-type="submit" :loading="loading">
-                立即创建
-              </el-button>
-              <el-button @click="onReset">
-                重置
-              </el-button>
-            </el-form-item>
-          </el-form>
-        </el-col>
-      </el-row>
-    </el-card>
+    <FaCard title="添加设备">
+      <div class="max-w-2xl">
+        <el-form
+          ref="formRef"
+          :model="ruleForm"
+          :rules="rules"
+          label-width="120px"
+          size="large"
+          @submit.prevent="onSubmit"
+        >
+          <el-form-item label="设备名称" prop="deviceName">
+            <FaInput v-model="ruleForm.deviceName" />
+          </el-form-item>
+          <el-form-item label="设备类型" prop="deviceType">
+            <FaSelect v-model="ruleForm.deviceType" :options="deviceTypeOptions" placeholder="请选择设备类型" />
+          </el-form-item>
+          <el-form-item label="固件版本">
+            <FaInput v-model="ruleForm.firmwareVersion" />
+          </el-form-item>
+          <el-form-item label="IP 地址">
+            <FaInput v-model="ruleForm.ipAddress" />
+          </el-form-item>
+          <el-form-item label="MAC 地址">
+            <FaInput v-model="ruleForm.macAddress" />
+          </el-form-item>
+          <el-form-item>
+            <FaButton variant="default" :loading="loading" @click="onSubmit">
+              立即创建
+            </FaButton>
+            <FaButton variant="outline" class="ml-2" @click="onReset">
+              重置
+            </FaButton>
+          </el-form-item>
+        </el-form>
+      </div>
+    </FaCard>
   </FaPageMain>
 </template>

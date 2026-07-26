@@ -47,4 +47,9 @@ interface ImportMetaEnv {
    * Supported editors https://github.com/yyx990803/launch-editor#supported-editors
    */
   readonly VITE_LAUNCH_EDITOR: string
+  /**
+   * WebSocket 连接地址（设备控制）
+   * WebSocket URL for device control
+   */
+  readonly VITE_WSS_URL: string
 }

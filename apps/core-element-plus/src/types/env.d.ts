@@ -3,6 +3,7 @@ interface ImportMetaEnv {
   /**
    * 网络请求地址，应用于 axios 的 baseURL
    * Network request address, applied to axios's baseURL
+   * VITE_APP_API_BASEURL = https://api.meatsuger.top/api
    */
   readonly VITE_APP_API_BASEURL: string
   /**

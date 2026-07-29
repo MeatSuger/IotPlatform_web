@@ -74,7 +74,7 @@ const IotRoutes: RouteRecordMainRaw = {
             icon: 'i-ant-design:control-outlined',
             keepAlive: true,
           },
-        }
+        },
       ],
     },
     // 数据监控

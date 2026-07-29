@@ -10,7 +10,8 @@ export const useAppAccountStore = defineStore('appAccount', () => {
   // 账号信息
   const token = ref(localStorage.getItem('token') ?? '')
   const account = ref(localStorage.getItem('account') ?? '')
-  const avatar = ref(localStorage.getItem('avatar') ?? '')
+  const role = ref(localStorage.getItem('role') ?? '')
+  const email = ref(localStorage.getItem('email') ?? '')
 
   // 权限信息
   const permissions = ref<string[]>([])
@@ -19,7 +20,9 @@ export const useAppAccountStore = defineStore('appAccount', () => {
   const userInfo = ref<{
     id?: number
     name?: string
+    account?: string
     roles?: string[]
+    email?: string
   }>({})
 
   // 登录状态
@@ -53,16 +56,20 @@ export const useAppAccountStore = defineStore('appAccount', () => {
     try {
       const res = await apiApp.getUserInfo()
       // IoT 后端返回 { code: 200, data: { id, account, name, avatar, roles, permissions } }
-      const info = res.data?.data || res.data || {}
+      const info = res.data?.user || {}
       localStorage.setItem('account', info.account || '')
-      localStorage.setItem('avatar', info.avatar || '')
+      localStorage.setItem('email', info.email || '')
+      localStorage.setItem('avatar', info.role || '')
       account.value = info.account || ''
-      avatar.value = info.avatar || ''
+      email.value = info.email || ''
+      role.value = info.role || ''
       permissions.value = info.permissions || ['*']
       userInfo.value = {
         id: info.id,
-        name: info.name || info.account,
-        roles: info.roles,
+        name: info.name,
+        account: info.account,
+        email: info.email,
+        roles: info.role,
       }
     }
     catch {
@@ -103,9 +110,11 @@ export const useAppAccountStore = defineStore('appAccount', () => {
   // 登出后清除状态
   function logoutCleanStatus() {
     localStorage.removeItem('account')
+    localStorage.removeItem('email')
     localStorage.removeItem('avatar')
     account.value = ''
-    avatar.value = ''
+    email.value = ''
+    role.value = ''
     permissions.value = []
     userInfo.value = {}
     appSettingsStore.updateSettings({}, true)
@@ -134,7 +143,8 @@ export const useAppAccountStore = defineStore('appAccount', () => {
   return {
     token,
     account,
-    avatar,
+    role,
+    email,
     permissions,
     userInfo,
     isLogin,

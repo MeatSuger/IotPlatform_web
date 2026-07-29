@@ -2,17 +2,18 @@
 import type { TableColumn } from '@fantastic-admin/components'
 import { useElementSize, useWindowSize } from '@vueuse/core'
 import { LineChart } from 'echarts/charts'
-import { GridComponent, LegendComponent, TitleComponent, TooltipComponent } from 'echarts/components'
+import { DataZoomComponent, GridComponent, LegendComponent, ToolboxComponent, TooltipComponent } from 'echarts/components'
 import { use } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
 import { computed, onActivated, onBeforeUnmount, onDeactivated, onMounted, reactive, ref, useTemplateRef, watch } from 'vue'
 import VChart from 'vue-echarts'
 import { onBeforeRouteUpdate, useRoute } from 'vue-router'
 import { dataApi } from '@/api/modules/iot/data'
+import { useAppSettingsStore } from '@/store/modules/app/settings'
 
 defineOptions({ name: 'Monitor' })
 
-use([CanvasRenderer, LineChart, GridComponent, TooltipComponent, LegendComponent, TitleComponent])
+use([CanvasRenderer, LineChart, DataZoomComponent, GridComponent, LegendComponent, ToolboxComponent, TooltipComponent])
 
 const dateRange = ref('')
 const shortcuts = [
@@ -44,6 +45,35 @@ const shortcuts = [
     },
   },
 ]
+
+const appSettingsStore = useAppSettingsStore()
+const chartTheme = computed(() => appSettingsStore.currentColorScheme === 'dark' ? 'dark' : '')
+
+const chartRef = useTemplateRef('chartRef')
+
+function enterZoomMode() {
+  const instance = chartRef.value?.chart
+  if (!instance) {
+    return
+  }
+  instance.dispatchAction({
+    type: 'takeGlobalCursor',
+    key: 'dataZoomSelect',
+    dataZoomSelectActive: true,
+  })
+}
+
+function leaveZoomMode() {
+  const instance = chartRef.value?.chart
+  if (!instance) {
+    return
+  }
+  instance.dispatchAction({
+    type: 'takeGlobalCursor',
+    key: 'dataZoomSelect',
+    dataZoomSelectActive: false,
+  })
+}
 
 const query = reactive({ deviceId: '', keyword: '' })
 
@@ -126,13 +156,48 @@ const chartOption = computed(() => {
     showSymbol: false,
   }))
   return {
-    title: { text: '监控指标趋势', left: 'center' },
-    tooltip: { trigger: 'axis' },
-    legend: { data: keys },
-    grid: { left: '3%', right: '3%', bottom: '3%', top: 50, containLabel: true },
-    xAxis: { type: 'category', boundaryGap: false, data: xData },
-    yAxis: { type: 'value' },
-    series,
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: {
+        type: 'cross',
+        label: {
+          backgroundColor: '#6a7985',
+        },
+      },
+    },
+    legend: {
+      data: keys,
+      top: 8,
+    },
+    toolbox: {
+      right: 10,
+      feature: {
+        dataZoom: {
+          yAxisIndex: 'none',
+        },
+        restore: {},
+        saveAsImage: {},
+      },
+    },
+    grid: {
+      left: '3%',
+      right: '4%',
+      bottom: '3%',
+      top: 40,
+      containLabel: true,
+    },
+    xAxis: {
+      type: 'category',
+      boundaryGap: false,
+      data: xData,
+    },
+    yAxis: {
+      type: 'value',
+    },
+    series: series.map(s => ({
+      ...s,
+      areaStyle: {},
+    })),
   }
 })
 
@@ -241,7 +306,9 @@ onBeforeUnmount(() => {
       </template>
 
       <div class="flex flex-1 flex-col min-h-0">
-        <VChart class="chart shrink-0" :option="chartOption" autoresize />
+        <div class="chart shrink-0" @mouseenter="enterZoomMode" @mouseleave="leaveZoomMode">
+          <VChart ref="chartRef" class="h-full w-full" :theme="chartTheme" :option="chartOption" autoresize />
+        </div>
         <div class="table-wrapper flex-1 min-h-0" :style="{ maxHeight: `${tableMaxHeight}px` }">
           <FaTable :columns="columns" :data="tablePageData" stripe border />
         </div>

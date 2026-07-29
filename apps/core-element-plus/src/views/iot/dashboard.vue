@@ -74,5 +74,9 @@ const lineChartOptions = ref({
 
 <style scoped>
 .mb-3 { margin-bottom: 12px; }
-.chart { width: 100%; height: 300px; }
+
+.chart {
+  width: 100%;
+  height: 30vh;
+}
 </style>

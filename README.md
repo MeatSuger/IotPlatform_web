@@ -37,7 +37,7 @@ pnpm lint
 复制 `.env.development` 并根据需要修改：
 
 ```env
-VITE_APP_API_BASEURL = http://localhost:9090/api
+VITE_APP_API_BASEURL = http://localhost:8182/api
 VITE_APP_TITLE = IoT Admin Platform
 ```
 

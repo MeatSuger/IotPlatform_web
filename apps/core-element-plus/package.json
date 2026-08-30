@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "vite",
     "prebuild": "node -e \"require('fs').mkdirSync('src/api/fake_modules',{recursive:true})\"",
-    "build": "vue-tsc -b && vite build",
+    "build": "vue-tsc -b && tsx  vite build",
     "serve": "http-server ./dist -o",
     "svgo": "svgo -f src/assets/icons",
     "generate:icons": "fa-iconify-tools",

@@ -68,7 +68,6 @@ export function useDeviceWebSocket() {
       ws.value = socket
 
       socket.onopen = () => {
-        console.warn('[DeviceWS] connected:', url)
         isConnected.value = true
         isConnecting.value = false
         reconnectAttempts = 0
@@ -86,7 +85,6 @@ export function useDeviceWebSocket() {
       socket.onmessage = (event: MessageEvent) => {
         try {
           const data = JSON.parse(event.data) as WsResponseMessage
-          console.warn('[DeviceWS] received:', data)
 
           // 处理服务端下发的鉴权结果
           if (data.type === 'auth') {
@@ -110,7 +108,6 @@ export function useDeviceWebSocket() {
       }
 
       socket.onclose = (event: CloseEvent) => {
-        console.warn('[DeviceWS] closed:', event.code, event.reason)
         isConnected.value = false
         isConnecting.value = false
         ws.value = null
@@ -160,8 +157,6 @@ export function useDeviceWebSocket() {
   }
 
   function sendCommand(message: WsControlMessage): boolean {
-    console.warn('[DeviceWS] sending:', message)
-
     if (ws.value && ws.value.readyState === WebSocket.OPEN) {
       ws.value.send(JSON.stringify(message))
       return true

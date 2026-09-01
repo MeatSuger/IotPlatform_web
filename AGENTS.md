@@ -63,7 +63,7 @@ pnpm lint         # 运行全量 lint（tsc + eslint + stylelint）
 
 - 框架内建组件在 `packages/components/` 子包中，优先使用内建组件而非第三方组件或自定义实现
 - 在任何情况下都请勿直接修改内建组件，确定修改前需要和用户进行确认
-- Mock 数据使用 `vite-plugin-fake-server`，文件放在 `apps/<app>/src/api/modules/` 对应模块旁
+- Mock 数据使用 `vite-plugin-fake-server`，文件放在 `apps/<app>/src/api/fake_modules/`，与对应 API 模块文件同命名（如 `device.ts` → `device.fake.ts`）
 - 代码提交前会自动运行 lint-staged，确保代码符合规范
 - Node.js 版本要求以根目录下 `package.json` 中定义的为准
 

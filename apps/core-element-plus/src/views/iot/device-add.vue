@@ -1,22 +1,20 @@
-<script lang="ts" setup>
-import type { FormInstance, FormRules } from 'element-plus'
-import { reactive, ref } from 'vue'
+<script setup lang="ts">
+import type { FormExpose } from '@fantastic-admin/components'
+import { toTypedSchema } from '@vee-validate/zod'
+import { ref } from 'vue'
+import * as z from 'zod'
 import { deviceApi } from '@/api/modules/iot/device'
 
-defineOptions({ name: 'AddDevice' })
+defineOptions({
+  name: 'AddDevice',
+})
 
-interface RuleForm {
-  deviceName: string
-  deviceType: string
-  firmwareVersion: string
-  ipAddress: string
-  macAddress: string
-}
+const router = useRouter()
 
-const formRef = ref<FormInstance>()
+const formRef = useTemplateRef<FormExpose>('formRef')
 const loading = ref(false)
 
-const ruleForm = reactive<RuleForm>({
+const model = ref({
   deviceName: '',
   deviceType: '',
   firmwareVersion: '',
@@ -24,36 +22,30 @@ const ruleForm = reactive<RuleForm>({
   macAddress: '',
 })
 
-const rules = reactive<FormRules<RuleForm>>({
-  deviceName: [{ required: true, message: '设备名称不能为空', trigger: 'blur' }],
-  deviceType: [{ required: true, message: '请选择设备类型', trigger: 'change' }],
-})
+const validationSchema = toTypedSchema(z.object({
+  deviceName: z.string().min(1, '请输入设备名称'),
+  deviceType: z.string().min(1, '请选择设备类型'),
+  firmwareVersion: z.string(),
+  ipAddress: z.string(),
+  macAddress: z.string(),
+}))
 
 const deviceTypeOptions = [
   { label: '温度(°C)', value: 'temperature' },
   { label: '湿度(%RH)', value: 'humidity' },
 ]
 
-async function onSubmit() {
-  if (!formRef.value) {
-    return
-  }
-  try {
-    await formRef.value.validate()
-  }
-  catch {
-    return
-  }
-
+async function onSubmit(values: typeof model.value) {
   loading.value = true
   try {
-    const res = await deviceApi.register(ruleForm)
-    if (res.data?.code === 200) {
+    // axios 拦截器已解包一层，res 即响应体 { code, message, data }
+    const res: any = await deviceApi.register(values)
+    if (res.code === 200) {
       useFaToast().success('设备添加成功')
       onReset()
     }
     else {
-      useFaToast().error('添加失败', { description: res.data?.message || '添加设备失败' })
+      useFaToast().error('添加失败', { description: res.message || '添加设备失败' })
     }
   }
   catch (error: any) {
@@ -68,45 +60,52 @@ async function onSubmit() {
 function onReset() {
   formRef.value?.resetFields()
 }
+
+function handleCancel() {
+  router.back()
+}
 </script>
 
 <template>
-  <FaPageMain>
-    <FaCard title="添加设备">
-      <div class="max-w-2xl">
-        <el-form
+  <div>
+    <FaPageHeader title="添加设备" />
+    <FaPageMain>
+      <div v-loading="loading" class="mx-auto max-w-600px">
+        <FaForm
           ref="formRef"
-          :model="ruleForm"
-          :rules="rules"
-          label-width="120px"
-          size="large"
-          @submit.prevent="onSubmit"
+          :model="model"
+          :validation-schema="validationSchema"
+          class="gap-6 grid"
+          @submit="onSubmit"
         >
-          <el-form-item label="设备名称" prop="deviceName">
-            <FaInput v-model="ruleForm.deviceName" />
-          </el-form-item>
-          <el-form-item label="设备类型" prop="deviceType">
-            <FaSelect v-model="ruleForm.deviceType" :options="deviceTypeOptions" placeholder="请选择设备类型" />
-          </el-form-item>
-          <el-form-item label="固件版本">
-            <FaInput v-model="ruleForm.firmwareVersion" />
-          </el-form-item>
-          <el-form-item label="IP 地址">
-            <FaInput v-model="ruleForm.ipAddress" />
-          </el-form-item>
-          <el-form-item label="MAC 地址">
-            <FaInput v-model="ruleForm.macAddress" />
-          </el-form-item>
-          <el-form-item>
-            <FaButton variant="default" :loading="loading" @click="onSubmit">
-              立即创建
-            </FaButton>
-            <FaButton variant="outline" class="ml-2" @click="onReset">
-              重置
-            </FaButton>
-          </el-form-item>
-        </el-form>
+          <FaFormItem name="deviceName" label="设备名称" required>
+            <FaInput placeholder="请输入设备名称" class="w-full" />
+          </FaFormItem>
+          <FaFormItem name="deviceType" label="设备类型" required>
+            <FaSelect :options="deviceTypeOptions" placeholder="请选择设备类型" class="w-full" />
+          </FaFormItem>
+          <FaFormItem name="firmwareVersion" label="固件版本">
+            <FaInput placeholder="请输入固件版本" class="w-full" />
+          </FaFormItem>
+          <FaFormItem name="ipAddress" label="IP 地址">
+            <FaInput placeholder="请输入 IP 地址" class="w-full" />
+          </FaFormItem>
+          <FaFormItem name="macAddress" label="MAC 地址">
+            <FaInput placeholder="请输入 MAC 地址" class="w-full" />
+          </FaFormItem>
+        </FaForm>
       </div>
-    </FaCard>
-  </FaPageMain>
+    </FaPageMain>
+    <FaFixedBar position="bottom" class="flex gap-2 justify-center">
+      <FaButton type="button" variant="outline" @click="handleCancel">
+        取消
+      </FaButton>
+      <FaButton type="button" :loading="loading" @click="onReset">
+        重置
+      </FaButton>
+      <FaButton type="submit" :loading="loading" @click="formRef?.submit()">
+        提交
+      </FaButton>
+    </FaFixedBar>
+  </div>
 </template>

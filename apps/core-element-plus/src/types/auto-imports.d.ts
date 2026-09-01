@@ -78,6 +78,7 @@ declare global {
   const useAppTabbar: typeof import('../composables/app/tabbar').useAppTabbar
   const useAppTabbarStore: typeof import('../store/modules/app/tabbar').useAppTabbarStore
   const useAttrs: typeof import('vue').useAttrs
+  const useControllerStore: typeof import('../store/modules/controller').useControllerStore
   const useCssModule: typeof import('vue').useCssModule
   const useCssVars: typeof import('vue').useCssVars
   const useDeviceWebSocket: typeof import('../composables/useDeviceWebSocket').useDeviceWebSocket
@@ -103,6 +104,9 @@ declare global {
   // @ts-ignore
   export type { Component, Slot, Slots, ComponentPublicInstance, ComputedRef, DirectiveBinding, ExtractDefaultPropTypes, ExtractPropTypes, ExtractPublicPropTypes, InjectionKey, PropType, Ref, ShallowRef, MaybeRef, MaybeRefOrGetter, VNode, WritableComputedRef } from 'vue'
   import('vue')
+  // @ts-ignore
+  export type { ControllerType, ControllerItem } from '../store/modules/controller'
+  import('../store/modules/controller')
   // @ts-ignore
   export type { WsControlPayload, WsControlMessage, WsResponseMessage } from '../composables/useDeviceWebSocket'
   import('../composables/useDeviceWebSocket')

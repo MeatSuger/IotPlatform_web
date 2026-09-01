@@ -4,7 +4,6 @@ import { LineChart } from 'echarts/charts'
 import { GridComponent, LegendComponent, TooltipComponent } from 'echarts/components'
 import { use } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
-import { ref } from 'vue'
 import VChart from 'vue-echarts'
 
 defineOptions({ name: 'Dashboard' })
@@ -73,8 +72,6 @@ const lineChartOptions = ref({
 </template>
 
 <style scoped>
-.mb-3 { margin-bottom: 12px; }
-
 .chart {
   width: 100%;
   height: 30vh;

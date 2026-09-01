@@ -7,11 +7,11 @@ export const useAppAccountStore = defineStore('appAccount', () => {
   const appRouteStore = useAppRouteStore()
   const appMenuStore = useAppMenuStore()
 
-  // 账号信息
-  const token = ref(localStorage.getItem('token') ?? '')
-  const account = ref(localStorage.getItem('account') ?? '')
-  const role = ref(localStorage.getItem('role') ?? '')
-  const email = ref(localStorage.getItem('email') ?? '')
+  // 账号信息（持久化由 pinia-plugin-persistedstate 处理）
+  const token = ref('')
+  const account = ref('')
+  const role = ref('')
+  const email = ref('')
 
   // 权限信息
   const permissions = ref<string[]>([])
@@ -45,7 +45,6 @@ export const useAppAccountStore = defineStore('appAccount', () => {
     })
     // IoT 后端返回 { code: 200, data: { tokenValue: "..." } }
     const tokenValue = res.data?.tokenValue || res.data?.data?.tokenValue || ''
-    localStorage.setItem('token', tokenValue)
     token.value = tokenValue
     // 获取用户信息
     await getUserInfo()
@@ -57,19 +56,18 @@ export const useAppAccountStore = defineStore('appAccount', () => {
       const res = await apiApp.getUserInfo()
       // IoT 后端返回 { code: 200, data: { id, account, name, avatar, roles, permissions } }
       const info = res.data?.user || {}
-      localStorage.setItem('account', info.account || '')
-      localStorage.setItem('email', info.email || '')
-      localStorage.setItem('avatar', info.role || '')
+      const roles = Array.isArray(info.roles) ? info.roles : (info.role ? [info.role] : [])
+      const roleName = roles[0] || ''
       account.value = info.account || ''
       email.value = info.email || ''
-      role.value = info.role || ''
+      role.value = roleName
       permissions.value = info.permissions || ['*']
       userInfo.value = {
         id: info.id,
         name: info.name,
         account: info.account,
         email: info.email,
-        roles: info.role,
+        roles,
       }
     }
     catch {
@@ -79,7 +77,6 @@ export const useAppAccountStore = defineStore('appAccount', () => {
 
   // 手动登出
   function logout(redirect = router.currentRoute.value.fullPath) {
-    localStorage.removeItem('token')
     token.value = ''
     router.push({
       name: 'login',
@@ -91,7 +88,6 @@ export const useAppAccountStore = defineStore('appAccount', () => {
 
   // 请求登出
   function requestLogout() {
-    localStorage.removeItem('token')
     token.value = ''
     router.push({
       name: 'login',
@@ -109,9 +105,6 @@ export const useAppAccountStore = defineStore('appAccount', () => {
 
   // 登出后清除状态
   function logoutCleanStatus() {
-    localStorage.removeItem('account')
-    localStorage.removeItem('email')
-    localStorage.removeItem('avatar')
     account.value = ''
     email.value = ''
     role.value = ''
@@ -155,4 +148,8 @@ export const useAppAccountStore = defineStore('appAccount', () => {
     getPermissions,
     editPassword,
   }
+}, {
+  persist: {
+    pick: ['token', 'account', 'role', 'email', 'permissions', 'userInfo'],
+  },
 })

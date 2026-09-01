@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { TableColumn } from '@fantastic-admin/components'
 import type { DeviceDetail, SensorItem } from '@/api/modules/iot/control'
+import type { ControllerItem, ControllerType } from '@/store/modules/controller'
 import { controlApi } from '@/api/modules/iot/control'
 import { deviceApi } from '@/api/modules/iot/device'
 import { useDeviceWebSocket } from '@/composables/useDeviceWebSocket'
@@ -71,28 +72,13 @@ const sensorColumns: TableColumn<SensorItem>[] = [
 ]
 
 // ==================== 控制器 ====================
-type ControllerType = 'switch' | 'enum'
-interface ControllerItem {
-  id: string
-  name: string
-  identifier: string
-  type: ControllerType
-  value: boolean | string
-  options?: string[]
-}
-
-const controllerStore = ref<Record<string, ControllerItem[]>>(
-  JSON.parse(localStorage.getItem('iot_controllers') || '{}'),
-)
-watch(controllerStore, (val) => {
-  localStorage.setItem('iot_controllers', JSON.stringify(val))
-}, { deep: true })
+const controllerStore = useControllerStore()
 
 const currentControllers = computed(() => {
   if (!selectedDetail.value) {
     return []
   }
-  return controllerStore.value[selectedDetail.value.deviceId] || []
+  return controllerStore.getByDevice(selectedDetail.value.deviceId)
 })
 
 const showAddDialog = ref(false)
@@ -137,10 +123,7 @@ function addController() {
   }
 
   const key = selectedDetail.value.deviceId
-  if (!controllerStore.value[key]) {
-    controllerStore.value[key] = []
-  }
-  controllerStore.value[key].push(newCtrl)
+  controllerStore.add(key, newCtrl)
   showAddDialog.value = false
 }
 
@@ -148,10 +131,7 @@ function removeController(ctrlId: string) {
   if (!selectedDetail.value) {
     return
   }
-  const key = selectedDetail.value.deviceId
-  controllerStore.value[key] = (controllerStore.value[key] || []).filter(
-    (c: ControllerItem) => c.id !== ctrlId,
-  )
+  controllerStore.remove(selectedDetail.value.deviceId, ctrlId)
 }
 
 async function toggleController(ctrl: ControllerItem) {
@@ -203,10 +183,12 @@ async function loadDeviceList() {
   listLoading.value = true
   try {
     const res = await deviceApi.list()
-    const list = Array.isArray(res?.data?.data)
-      ? res.data.data
-      : Array.isArray(res?.data)
-        ? res.data
+    // 兼容两种返回格式：真实后端 { data: [...] } 与 fake mock { data: { list, total } }
+    // axios 拦截器已解包一层，payload 在 res.data
+    const list = Array.isArray(res?.data)
+      ? res.data
+      : Array.isArray(res?.data?.list)
+        ? res.data.list
         : []
     deviceList.value = list.map((d: any) => ({
       deviceId: d.deviceId || d.deviceid || d.id || '',

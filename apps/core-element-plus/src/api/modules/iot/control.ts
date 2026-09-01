@@ -10,7 +10,7 @@ export interface SensorItem {
   unit?: string
 }
 
-// ==================== 设备详情（真实 API: GET /api/device/{deviceId}/Data） ====================
+// ==================== 设备详情（真实 API: GET /api/devices/{deviceId}） ====================
 export interface DeviceDetail {
   deviceId: string
   deviceName: string
@@ -29,11 +29,11 @@ export interface DeviceDetail {
 
 // ==================== HTTP API ====================
 export const controlApi = {
-  // GET /api/device/{deviceId}/Data
+  // GET /api/devices/{deviceId}
   getDetail: (deviceId: string) =>
-    api.get(`/device/${encodeURIComponent(deviceId)}/Data`),
+    api.get(`/devices/${encodeURIComponent(deviceId)}`),
 
-  // POST /api/device/{deviceId}/cmd — 下发控制指令（预留）
+  // POST /api/devices/{deviceId}/commands — 下发控制指令（预留）
   sendCommand: (deviceId: string, data: Record<string, any>) =>
-    api.post(`/device/${encodeURIComponent(deviceId)}/cmd`, data),
+    api.post(`/devices/${encodeURIComponent(deviceId)}/commands`, data),
 }

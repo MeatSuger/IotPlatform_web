@@ -80,20 +80,33 @@ function getByDeviceId(deviceId: string): DeviceRecord | undefined {
 }
 
 export default defineFakeRoute([
-  // GET /api/device/list
+  // GET /api/devices — 支持 devicename 模糊搜索 + from/limit 分页
   {
-    url: '/device/list',
+    url: '/devices',
     method: 'GET',
-    response: () => ({
-      code: 200,
-      message: 'success',
-      data: deviceList.map(({ sensors: _, ...rest }) => rest),
-    }),
+    response: (req: ProcessedRequest) => {
+      const { devicename, from = 0, limit = 10 } = req.query
+      const keyword = String(devicename ?? '').trim().toLowerCase()
+      const matched = keyword
+        ? deviceList.filter(d => d.deviceName.toLowerCase().includes(keyword) || d.deviceId.toLowerCase().includes(keyword))
+        : deviceList
+      const total = matched.length
+      const start = ~~from
+      const end = start + ~~limit
+      return {
+        code: 200,
+        message: 'success',
+        data: {
+          list: matched.slice(start, end).map(({ sensors: _, ...rest }) => rest),
+          total,
+        },
+      }
+    },
   },
 
-  // GET /api/device/{deviceId}/Data
+  // GET /api/devices/{deviceId}
   {
-    url: '/device/:deviceId/Data',
+    url: '/devices/:deviceId',
     method: 'GET',
     response: (req: ProcessedRequest) => {
       const device = getByDeviceId(req.params.deviceId as string)
@@ -104,9 +117,9 @@ export default defineFakeRoute([
     },
   },
 
-  // POST /api/device/register
+  // POST /api/devices
   {
-    url: '/device/register',
+    url: '/devices',
     method: 'POST',
     response: (req: ProcessedRequest) => {
       const body = req.body
@@ -133,9 +146,9 @@ export default defineFakeRoute([
     },
   },
 
-  // POST /api/device/{deviceId}/delete
+  // POST /api/devices/{deviceId}/delete
   {
-    url: '/device/:deviceId/delete',
+    url: '/devices/:deviceId/delete',
     method: 'POST',
     response: (req: ProcessedRequest) => {
       const idx = deviceList.findIndex(d => d.deviceId === req.params.deviceId)

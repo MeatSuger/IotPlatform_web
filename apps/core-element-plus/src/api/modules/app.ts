@@ -8,16 +8,16 @@ export default {
   login: (data: {
     account: string
     passwd: string
-  }) => api.post('/user/login', data),
+  }) => api.post('/users/login', data),
 
   // 注册
   register: (data: {
     account: string
     passwd: string
-  }) => api.post('/user/register', data),
+  }) => api.post('/users', data),
 
   // 获取用户信息（含权限）
-  getUserInfo: () => api.get('/user/isLogin'),
+  getUserInfo: () => api.get('/users/isLogin'),
 
   // 修改密码
   passwordEdit: (data: {

@@ -28,6 +28,9 @@ const { pagination, getParams, onSizeChange, onCurrentChange } = usePagination()
 // 表格是否自适应高度
 const tableAutoHeight = ref(true)
 
+// 列表 / 卡片视图切换
+const viewMode = ref<'list' | 'card'>('list')
+
 // 搜索
 const searchDefault = {
   devicename: '',
@@ -67,16 +70,16 @@ function normalize(row: any): DeviceRow {
 }
 
 const tableColumns = computed<TableColumn<DeviceRow>[]>(() => [
+  { accessorKey: 'deviceName', header: '设备名称', width: 'auto' },
   { accessorKey: 'deviceId', header: '设备ID' },
-  { accessorKey: 'deviceName', header: '设备名称' },
   { accessorKey: 'deviceType', header: '设备类型', width: 120, align: 'center' },
   { accessorKey: 'status', header: '状态', width: 90, align: 'center' },
   { accessorKey: 'lastActiveTime', header: '最后活跃', width: 180 },
   { accessorKey: 'location', header: '位置', width: 120 },
   {
-    id: 'operation',
-    header: '操作',
-    width: 100,
+    id: 'more',
+    header: '',
+    width: 60,
     align: 'center',
     fixed: 'right',
   },
@@ -132,8 +135,16 @@ function onCreate() {
   router.push({ name: 'AddDevice' })
 }
 
-function onMonitor(row: DeviceRow) {
-  router.push({ name: 'MonitorIndex', query: { deviceId: row.deviceId } })
+function switchToList() {
+  viewMode.value = 'list'
+}
+
+function switchToCard() {
+  viewMode.value = 'card'
+}
+
+function onEdit(row: DeviceRow) {
+  router.push({ name: 'DeviceControl', query: { deviceId: row.deviceId } })
 }
 
 function onDel(row: DeviceRow) {
@@ -208,59 +219,73 @@ onActivated(() => {
         </template>
       </FaSearchBar>
       <div class="mx--4 my-3 border-t border-t-dashed" />
-      <FaTable
-        table-root-class="rounded-lg overflow-hidden"
-        :class="{ 'min-h-0 flex-1': tableAutoHeight }"
-        row-key="id"
-        selectable
-        multiple
-        stripe
-        border
-        :columns="tableColumns"
-        :data="dataList"
-        @selection-change="batch.selectionDataList = $event"
-      >
-        <template #toolbar>
-          <div class="flex flex-1 gap-2 items-center">
-            <FaButton @click="onCreate">
-              新增
+      <!-- 顶部操作栏：列表/卡片切换 始终可见 -->
+      <div class="mb-3 flex gap-2 items-center justify-between">
+        <div class="flex gap-2 items-center">
+          <FaButton @click="onCreate">
+            新增
+          </FaButton>
+          <FaDropdown
+            v-if="batch.enable && viewMode === 'list'"
+            :items="[
+              [
+                { label: '批量删除', variant: 'destructive', disabled: !batch.selectionDataList.length, handle: onBatchDel },
+              ],
+            ]"
+          >
+            <FaButton variant="outline" :disabled="!batch.selectionDataList.length">
+              批量操作
+              <FaIcon name="i-ep:arrow-down" />
             </FaButton>
-            <FaDropdown
-              v-if="batch.enable"
-              :items="[
-                [
-                  { label: '批量删除', variant: 'destructive', disabled: !batch.selectionDataList.length, handle: onBatchDel },
-                ],
-              ]"
-            >
-              <FaButton variant="outline" :disabled="!batch.selectionDataList.length">
-                批量操作
-                <FaIcon name="i-ep:arrow-down" />
-              </FaButton>
-            </FaDropdown>
-            <FaButton variant="outline" :loading="loading" @click="getDataList">
-              刷新
-            </FaButton>
-          </div>
-        </template>
-        <template #cell-status="{ value }">
-          <FaTag :variant="value === 'ONLINE' ? 'default' : 'secondary'">
-            {{ value === 'ONLINE' ? '在线' : '离线' }}
-          </FaTag>
-        </template>
-        <template #cell-lastActiveTime="{ value }">
-          {{ formatTime(value) }}
-        </template>
-        <template #cell-deviceId="{ row }">
-          <span class="text-primary cursor-pointer hover:underline" @click="onMonitor(row.original)">
-            {{ row.original.deviceId }}
-          </span>
-        </template>
-        <template #cell-operation="{ row }">
-          <div class="flex-center gap-2">
-            <FaButton variant="outline" size="icon-sm" @click="onMonitor(row.original)">
-              <FaIcon name="i-ri:eye-line" />
-            </FaButton>
+          </FaDropdown>
+          <FaButton variant="outline" :loading="loading" @click="getDataList">
+            刷新
+          </FaButton>
+        </div>
+        <FaButtonGroup>
+          <FaButton :variant="viewMode === 'list' ? 'default' : 'outline'" size="sm" @click="switchToList">
+            <FaIcon name="i-ri:list-unordered" />
+            列表
+          </FaButton>
+          <FaButton :variant="viewMode === 'card' ? 'default' : 'outline'" size="sm" @click="switchToCard">
+            <FaIcon name="i-ri:layout-grid-line" />
+            卡片
+          </FaButton>
+        </FaButtonGroup>
+      </div>
+      <template v-if="viewMode === 'list'">
+        <FaTable
+          table-root-class="rounded-lg overflow-hidden"
+          :class="{ 'min-h-0 flex-1': tableAutoHeight }"
+          row-key="id"
+          selectable
+          multiple
+          stripe
+          border
+          :columns="tableColumns"
+          :data="dataList"
+          @selection-change="batch.selectionDataList = $event"
+        >
+          <template #cell-status="{ value }">
+            <FaTag :variant="value === 'ONLINE' ? 'default' : 'secondary'">
+              {{ value === 'ONLINE' ? '在线' : '离线' }}
+            </FaTag>
+          </template>
+          <template #cell-lastActiveTime="{ value }">
+            {{ formatTime(value) }}
+          </template>
+          <template #cell-deviceName="{ row }">
+            <div class="group flex flex-col cursor-pointer" @click="onEdit(row.original)">
+              <span class="text-primary leading-tight font-semibold whitespace-nowrap">{{ row.original.deviceName }}</span>
+              <span class="text-xs text-primary leading-tight opacity-0 transition-opacity group-hover:opacity-100">
+                编辑
+              </span>
+            </div>
+          </template>
+          <template #cell-deviceId="{ value }">
+            <span>{{ value }}</span>
+          </template>
+          <template #cell-more="{ row }">
             <FaDropdown
               :items="[
                 [
@@ -269,12 +294,78 @@ onActivated(() => {
               ]"
             >
               <FaButton variant="outline" size="icon-sm">
-                <FaIcon name="i-ri:more-line" />
+                <FaIcon name="i-ri:more-2-fill" />
               </FaButton>
             </FaDropdown>
-          </div>
-        </template>
-      </FaTable>
+          </template>
+        </FaTable>
+      </template>
+      <!-- 卡片视图（参考 1Panel Docker 卡片布局） -->
+      <template v-else>
+        <FaEmpty v-if="!dataList.length" description="暂无设备数据" />
+        <div
+          v-else
+          class="gap-3 grid grid-cols-1 2xl:grid-cols-4 sm:grid-cols-2 xl:grid-cols-3"
+        >
+          <FaCard
+            v-for="device in dataList"
+            :key="device.id"
+            class="!p-0! !gap-0! cursor-pointer transition-shadow overflow-hidden hover:shadow-md"
+            content-class="!p-0!"
+            @click="onEdit(device)"
+          >
+            <div class="px-4 py-2.5 border-b flex gap-2 items-center">
+              <span class="text-primary font-semibold min-w-0 truncate">{{ device.deviceName }}</span>
+              <div class="ml-auto flex shrink-0 gap-1.5 items-center">
+                <FaTag :variant="device.status === 'ONLINE' ? 'default' : 'secondary'">
+                  {{ device.status === 'ONLINE' ? '在线' : '离线' }}
+                </FaTag>
+                <div @click.stop>
+                  <FaDropdown
+                    :items="[
+                      [
+                        { label: '删除', variant: 'destructive', handle: () => onDel(device) },
+                      ],
+                    ]"
+                  >
+                    <FaButton variant="ghost" size="icon-sm">
+                      <FaIcon name="i-ri:more-2-fill" />
+                    </FaButton>
+                  </FaDropdown>
+                </div>
+              </div>
+            </div>
+            <div class="text-sm px-4 py-3 flex flex-col gap-2">
+              <div class="flex gap-3 items-center justify-between">
+                <span class="text-gray-500 shrink-0">设备ID</span>
+                <span class="font-medium min-w-0 truncate">{{ device.deviceId }}</span>
+              </div>
+              <div class="flex gap-3 items-center justify-between">
+                <span class="text-gray-500 shrink-0">设备类型</span>
+                <span class="font-medium min-w-0 truncate">{{ device.deviceType || '-' }}</span>
+              </div>
+              <div class="flex gap-3 items-center justify-between">
+                <span class="text-gray-500 shrink-0">位置</span>
+                <span class="font-medium min-w-0 truncate">{{ device.location || '-' }}</span>
+              </div>
+              <div class="flex gap-3 items-center justify-between">
+                <span class="text-gray-500 shrink-0">最后活跃</span>
+                <span class="font-medium min-w-0 truncate">{{ formatTime(device.lastActiveTime) }}</span>
+              </div>
+              <div v-if="device.ipAddress" class="flex gap-3 items-center justify-between">
+                <span class="text-gray-500 shrink-0">IP</span>
+                <span class="font-medium min-w-0 truncate">{{ device.ipAddress }}</span>
+              </div>
+            </div>
+            <div class="px-4 py-2.5 border-t bg-accent/50">
+              <FaButton variant="outline" size="sm" class="w-full" @click.stop="onEdit(device)">
+                <FaIcon name="i-ri:edit-line" />
+                编辑
+              </FaButton>
+            </div>
+          </FaCard>
+        </div>
+      </template>
       <FaPagination :page="pagination.page" :size="pagination.size" :total="pagination.total" class="mt-2" @page-change="currentChange" @size-change="sizeChange" />
     </FaPageMain>
   </div>

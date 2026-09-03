@@ -20,6 +20,7 @@ const model = ref({
   firmwareVersion: '',
   ipAddress: '',
   macAddress: '',
+  location: '',
 })
 
 const validationSchema = toTypedSchema(z.object({
@@ -28,6 +29,7 @@ const validationSchema = toTypedSchema(z.object({
   firmwareVersion: z.string(),
   ipAddress: z.string(),
   macAddress: z.string(),
+  location: z.string(),
 }))
 
 const deviceTypeOptions = [
@@ -92,6 +94,9 @@ function handleCancel() {
           </FaFormItem>
           <FaFormItem name="macAddress" label="MAC 地址">
             <FaInput placeholder="请输入 MAC 地址" class="w-full" />
+          </FaFormItem>
+          <FaFormItem name="location" label="位置">
+            <FaInput placeholder="请输入设备位置（可选）" class="w-full" />
           </FaFormItem>
         </FaForm>
       </div>

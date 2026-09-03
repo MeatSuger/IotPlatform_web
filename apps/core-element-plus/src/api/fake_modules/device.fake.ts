@@ -117,13 +117,14 @@ export default defineFakeRoute([
     },
   },
 
-  // POST /api/devices
+  // POST /api/devices — 注册设备，返回 deviceId + deviceToken
   {
     url: '/devices',
     method: 'POST',
     response: (req: ProcessedRequest) => {
       const body = req.body
       const now = new Date().toISOString()
+      const deviceToken = faker.string.uuid()
       const newDevice: DeviceRecord = {
         id: deviceList.length + 1,
         deviceId: faker.string.alphanumeric({ length: 6, casing: 'lower' }),
@@ -137,12 +138,67 @@ export default defineFakeRoute([
         firmwareVersion: body.firmwareVersion || 'v1.0.0',
         ipAddress: body.ipAddress || faker.internet.ipv4(),
         macAddress: body.macAddress || faker.internet.mac(),
-        location: '',
+        location: body.location || '',
         sensors: generateSensors(),
       }
       deviceList.push(newDevice)
       deviceDetailMap.set(newDevice.id, newDevice)
-      return { code: 200, message: '设备注册成功', data: newDevice }
+      return {
+        code: 200,
+        message: '设备注册成功',
+        data: { deviceId: newDevice.deviceId, deviceToken },
+      }
+    },
+  },
+
+  // POST /api/devices/{deviceId}/update — 增量更新设备
+  {
+    url: '/devices/:deviceId/update',
+    method: 'POST',
+    response: (req: ProcessedRequest) => {
+      const device = getByDeviceId(req.params.deviceId as string)
+      if (!device) {
+        return { code: 404, message: '设备不存在', data: null }
+      }
+      const body = req.body || {}
+      const updatableFields = [
+        'deviceName',
+        'deviceType',
+        'firmwareVersion',
+        'ipAddress',
+        'macAddress',
+        'location',
+      ] as const
+      const keys = Object.keys(body).filter(k => (updatableFields as readonly string[]).includes(k))
+      if (!keys.length) {
+        return { code: 400, message: '无更新字段', data: null }
+      }
+      keys.forEach((key) => {
+        ;(device as any)[key] = body[key]
+      })
+      device.updatedAt = new Date().toISOString()
+      return { code: 200, message: '设备更新成功', data: device }
+    },
+  },
+
+  // GET /api/devices/{deviceId}/token — 获取设备 Token（复用）
+  {
+    url: '/devices/:deviceId/token',
+    method: 'GET',
+    response: (req: ProcessedRequest) => {
+      const device = getByDeviceId(req.params.deviceId as string)
+      if (!device) {
+        return { code: 404, message: '设备不存在', data: null }
+      }
+      const tokenMap = new Map<string, string>()
+      if (!tokenMap.has(device.deviceId)) {
+        tokenMap.set(device.deviceId, faker.string.uuid())
+      }
+      return {
+        code: 200,
+        message: 'success',
+        data: { deviceId: device.deviceId, deviceToken: tokenMap.get(device.deviceId) },
+      }
     },
   },
 

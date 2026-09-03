@@ -124,7 +124,7 @@ function buildParams() {
   const range = dateRange.value
   return {
     limit: Math.max(pageSize.value * 2, 20),
-    ...(range ? { startTime: +range[0], endTime: +range[1] } : {}),
+    ...(range ? { start: range[0].toISOString(), end: range[1].toISOString() } : {}),
   }
 }
 

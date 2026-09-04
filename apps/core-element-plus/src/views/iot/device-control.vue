@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import type { TableColumn } from '@fantastic-admin/components'
 import type { DeviceConfig, DeviceConfigPayload, DeviceDetail, SensorItem } from '@/api/modules/iot/control'
+import type { SensorConfig } from '@/api/modules/iot/sensor'
 import type { ControllerItem, ControllerType } from '@/store/modules/controller'
 import { controlApi } from '@/api/modules/iot/control'
 import { deviceApi } from '@/api/modules/iot/device'
+import { sensorApi } from '@/api/modules/iot/sensor'
 import { useDeviceWebSocket } from '@/composables/useDeviceWebSocket'
 
 defineOptions({ name: 'DeviceControl' })
@@ -57,6 +59,8 @@ async function enterDetail(deviceId: string) {
     selectedDetail.value = await fetchDetail(deviceId)
     viewMode.value = 'detail'
     lastRefreshTime.value = new Date().toLocaleTimeString()
+    // 先拉取传感器配置（值随后由设备详情填充）
+    fetchSensorConfig(deviceId)
   }
   catch {
     useFaToast().error('获取设备详情失败')
@@ -103,11 +107,70 @@ function backToList() {
   selectedDetail.value = null
 }
 
-// ==================== 添加传感器 ====================
-// 本地新增的传感器按 deviceId 暂存（与后端/自动刷新返回的数据合并展示，避免被刷新覆盖）
-const localSensorsMap = reactive<Record<string, SensorItem[]>>({})
+// ==================== 传感器配置（预留接口）+ 数值展示 ====================
+// 配置从后端拉取存本地（值先空置），数值由设备详情合并填充
+const sensorConfigs = ref<SensorConfig[]>([])
+const sensorViewMode = ref<'list' | 'grid'>('list')
 
-const showAddSensorDialog = ref(false)
+async function fetchSensorConfig(deviceId: string) {
+  try {
+    const res: any = await sensorApi.getList(deviceId)
+    const data = res?.data?.data ?? res?.data
+    sensorConfigs.value = Array.isArray(data) ? data : []
+  }
+  catch (e) {
+    // 预留接口暂不可用时置空，displaySensors 将回退展示设备详情 sensors
+    console.warn('[DeviceControl] fetch sensor config failed, fallback to detail sensors:', e)
+    sensorConfigs.value = []
+  }
+}
+
+// 配置决定展示哪些传感器，数值从设备详情匹配填充（标识名/类型/名称）
+const displaySensors = computed<SensorItem[]>(() => {
+  const values = (selectedDetail.value?.sensors ?? []) as Array<Record<string, any>>
+  if (!sensorConfigs.value.length) {
+    return values as unknown as SensorItem[]
+  }
+  return sensorConfigs.value.map((config) => {
+    const hit = values.find(v =>
+      v.identifier === config.identifier
+      || v.type === config.identifier
+      || v.name === config.name,
+    )
+    return {
+      ...config,
+      value: hit && hit.value != null ? String(hit.value) : '',
+    }
+  })
+})
+
+const sensorColumns: TableColumn<SensorItem>[] = [
+  { accessorKey: 'name', header: '传感器名称', width: 'auto' },
+  { accessorKey: 'identifier', header: '标识名' },
+  { accessorKey: 'transferType', header: '传输类型', width: 110, align: 'center' },
+  { accessorKey: 'dataType', header: '数据类型', width: 110, align: 'center' },
+  { accessorKey: 'value', header: '当前值', width: 140 },
+  {
+    id: 'sensorMore',
+    header: '操作',
+    width: 60,
+    align: 'center',
+  },
+]
+
+function switchSensorToList() {
+  sensorViewMode.value = 'list'
+}
+
+function switchSensorToGrid() {
+  sensorViewMode.value = 'grid'
+}
+
+// ==================== 新增 / 编辑 / 删除 传感器配置 ====================
+const showSensorDialog = ref(false)
+const sensorDialogMode = ref<'add' | 'edit'>('add')
+const sensorSaving = ref(false)
+const editingSensorIdentifier = ref('')
 const sensorForm = reactive({
   name: '',
   identifier: '',
@@ -128,28 +191,29 @@ const transferTypeOptions = [
   { label: '上报和下发', value: '上报和下发' },
 ]
 
-const displaySensors = computed<SensorItem[]>(() => {
-  const server = selectedDetail.value?.sensors ?? []
-  const local = selectedDetail.value?.deviceId ? (localSensorsMap[selectedDetail.value.deviceId] ?? []) : []
-  const merged = [...server]
-  local.forEach((sensor) => {
-    if (!merged.some(item => item.identifier === sensor.identifier)) {
-      merged.push(sensor)
-    }
-  })
-  return merged
-})
-
 function openAddSensorDialog() {
+  sensorDialogMode.value = 'add'
+  editingSensorIdentifier.value = ''
   sensorForm.name = ''
   sensorForm.identifier = ''
   sensorForm.transferType = '只上报'
   sensorForm.dataType = '浮点型'
   sensorForm.unit = ''
-  showAddSensorDialog.value = true
+  showSensorDialog.value = true
 }
 
-function addSensor() {
+function openEditSensorDialog(sensor: SensorItem) {
+  sensorDialogMode.value = 'edit'
+  editingSensorIdentifier.value = sensor.identifier
+  sensorForm.name = sensor.name
+  sensorForm.identifier = sensor.identifier
+  sensorForm.transferType = sensor.transferType || '只上报'
+  sensorForm.dataType = sensor.dataType || '浮点型'
+  sensorForm.unit = sensor.unit ?? ''
+  showSensorDialog.value = true
+}
+
+async function saveSensor() {
   const deviceId = selectedDetail.value?.deviceId
   if (!deviceId) {
     return
@@ -158,19 +222,53 @@ function addSensor() {
     useFaToast().warning('请填写名称和标识名')
     return
   }
-  if (!localSensorsMap[deviceId]) {
-    localSensorsMap[deviceId] = []
-  }
-  localSensorsMap[deviceId].push({
+  const payload: SensorConfig = {
     name: sensorForm.name.trim(),
     identifier: sensorForm.identifier.trim(),
     transferType: sensorForm.transferType,
     dataType: sensorForm.dataType,
     unit: sensorForm.unit.trim() || undefined,
-    value: '',
+  }
+  sensorSaving.value = true
+  try {
+    if (sensorDialogMode.value === 'add') {
+      await sensorApi.create(deviceId, payload)
+      useFaToast().success('传感器添加成功')
+    }
+    else {
+      await sensorApi.update(deviceId, editingSensorIdentifier.value, payload)
+      useFaToast().success('传感器更新成功')
+    }
+    showSensorDialog.value = false
+    await fetchSensorConfig(deviceId)
+  }
+  catch {
+    useFaToast().error(sensorDialogMode.value === 'add' ? '传感器添加失败' : '传感器更新失败')
+  }
+  finally {
+    sensorSaving.value = false
+  }
+}
+
+function removeSensor(sensor: SensorItem) {
+  const deviceId = selectedDetail.value?.deviceId
+  if (!deviceId) {
+    return
+  }
+  useFaModal().confirm({
+    title: '确认信息',
+    content: `确认删除传感器「${sensor.name || sensor.identifier}」吗？`,
+    onConfirm: async () => {
+      try {
+        await sensorApi.remove(deviceId, sensor.identifier)
+        useFaToast().success('传感器删除成功')
+        await fetchSensorConfig(deviceId)
+      }
+      catch {
+        useFaToast().error('传感器删除失败')
+      }
+    },
   })
-  showAddSensorDialog.value = false
-  useFaToast().success('传感器添加成功')
 }
 
 // ==================== 设备配置（DeviceConfig 快照） ====================
@@ -709,6 +807,14 @@ onBeforeUnmount(() => {
                   <span v-if="lastRefreshTime" class="text-xs text-gray-400">
                     更新于 {{ lastRefreshTime }} · 每 60 秒自动刷新
                   </span>
+                  <FaButtonGroup>
+                    <FaButton :variant="sensorViewMode === 'list' ? 'default' : 'outline'" size="sm" @click="switchSensorToList">
+                      <FaIcon name="i-ri:list-unordered" />
+                    </FaButton>
+                    <FaButton :variant="sensorViewMode === 'grid' ? 'default' : 'outline'" size="sm" @click="switchSensorToGrid">
+                      <FaIcon name="i-ri:layout-grid-line" />
+                    </FaButton>
+                  </FaButtonGroup>
                   <FaButton variant="outline" size="sm" @click="openAddSensorDialog">
                     <FaIcon name="i-material-symbols:add" class="mr-1 size-4" />
                     添加
@@ -719,27 +825,112 @@ onBeforeUnmount(() => {
                 </div>
               </div>
             </template>
-            <div v-if="displaySensors.length" class="gap-3 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3">
-              <FaCard
-                v-for="sensor in displaySensors" :key="sensor.identifier"
-                class="!p-0! !gap-0! overflow-hidden" content-class="!p-0!"
+
+            <!-- 列表视图（对齐设备信息表格） -->
+            <template v-if="sensorViewMode === 'list'">
+              <FaTable
+                v-if="displaySensors.length"
+                table-root-class="rounded-lg overflow-hidden"
+                row-key="identifier"
+                stripe
+                border
+                :columns="sensorColumns"
+                :data="displaySensors"
               >
-                <div class="px-4 py-3">
-                  <div class="flex gap-2 items-center justify-between">
-                    <span class="text-primary font-semibold min-w-0 truncate">{{ sensor.name }}</span>
-                    <span class="text-xs text-gray-400 shrink-0">{{ sensor.transferType }}</span>
+                <template #cell-name="{ row }">
+                  <FaTooltip :delay="100" side="bottom" align="start">
+                    <span class="text-primary font-semibold underline decoration-1 underline-offset-2 cursor-pointer whitespace-nowrap hover:text-primary/80" @click="openEditSensorDialog(row.original)">
+                      {{ row.original.name }}
+                    </span>
+                    <template #content>
+                      <span class="cursor-pointer whitespace-nowrap hover:opacity-70" @click.stop="openEditSensorDialog(row.original)">编辑</span>
+                    </template>
+                  </FaTooltip>
+                </template>
+                <template #cell-transferType="{ value }">
+                  <FaTag variant="secondary">
+                    {{ value }}
+                  </FaTag>
+                </template>
+                <template #cell-dataType="{ value }">
+                  <FaTag variant="secondary">
+                    {{ value }}
+                  </FaTag>
+                </template>
+                <template #cell-value="{ row }">
+                  <span class="font-semibold">{{ row.original.value || '-' }}{{ row.original.unit ?? '' }}</span>
+                </template>
+                <template #cell-sensorMore="{ row }">
+                  <FaDropdown
+                    :items="[
+                      [
+                        { label: '编辑', handle: () => openEditSensorDialog(row.original) },
+                        { label: '删除', variant: 'destructive', handle: () => removeSensor(row.original) },
+                      ],
+                    ]"
+                  >
+                    <FaButton variant="outline" size="icon-sm">
+                      <FaIcon name="i-ri:more-2-fill" />
+                    </FaButton>
+                  </FaDropdown>
+                </template>
+              </FaTable>
+              <FaEmpty v-else description="无传感器数据" />
+            </template>
+
+            <!-- 网格视图（对齐设备信息卡片） -->
+            <template v-else>
+              <div v-if="displaySensors.length" class="gap-3 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3">
+                <FaCard
+                  v-for="sensor in displaySensors" :key="sensor.identifier"
+                  class="!p-0! !gap-0! overflow-hidden" content-class="!p-0!"
+                >
+                  <div class="px-4 py-2.5 border-b flex gap-2 items-center">
+                    <span class="text-primary font-semibold underline decoration-1 underline-offset-2 min-w-0 cursor-pointer truncate hover:text-primary/80" @click="openEditSensorDialog(sensor)">
+                      {{ sensor.name }}
+                    </span>
+                    <div class="ml-auto flex shrink-0 gap-1.5 items-center">
+                      <FaTag variant="secondary">
+                        {{ sensor.transferType }}
+                      </FaTag>
+                      <FaDropdown
+                        :items="[
+                          [
+                            { label: '编辑', handle: () => openEditSensorDialog(sensor) },
+                            { label: '删除', variant: 'destructive', handle: () => removeSensor(sensor) },
+                          ],
+                        ]"
+                      >
+                        <FaButton variant="ghost" size="icon-sm">
+                          <FaIcon name="i-ri:more-2-fill" />
+                        </FaButton>
+                      </FaDropdown>
+                    </div>
                   </div>
-                  <div class="mt-3 flex gap-1 items-baseline">
-                    <span class="text-2xl text-primary leading-none font-bold">{{ sensor.value || '-' }}</span>
-                    <span v-if="sensor.unit" class="text-sm text-gray-400">{{ sensor.unit }}</span>
+                  <div class="text-sm px-4 py-3 flex flex-col gap-2">
+                    <div class="flex gap-3 items-center justify-between">
+                      <span class="text-gray-500 shrink-0">标识名</span>
+                      <span class="font-medium min-w-0 truncate">{{ sensor.identifier }}</span>
+                    </div>
+                    <div class="flex gap-3 items-center justify-between">
+                      <span class="text-gray-500 shrink-0">数据类型</span>
+                      <span class="font-medium min-w-0 truncate">{{ sensor.dataType || '-' }}</span>
+                    </div>
+                    <div class="flex gap-3 items-center justify-between">
+                      <span class="text-gray-500 shrink-0">当前值</span>
+                      <span class="text-primary font-semibold min-w-0 truncate">{{ sensor.value || '-' }}{{ sensor.unit ?? '' }}</span>
+                    </div>
                   </div>
-                  <div class="text-xs text-gray-400 mt-2">
-                    {{ sensor.dataType || '未知类型' }} · 标识 {{ sensor.identifier }}
+                  <div class="px-4 py-2.5 border-t bg-accent/50">
+                    <FaButton variant="outline" size="sm" class="w-full" @click="openEditSensorDialog(sensor)">
+                      <FaIcon name="i-ri:edit-line" />
+                      编辑
+                    </FaButton>
                   </div>
-                </div>
-              </FaCard>
-            </div>
-            <FaEmpty v-else description="无传感器数据" />
+                </FaCard>
+              </div>
+              <FaEmpty v-else description="无传感器数据" />
+            </template>
           </FaCard>
 
           <FaCard title="控制器" class="p-3 flex-1 min-w-0" content-class="flex-1 min-h-0 overflow-auto">
@@ -892,10 +1083,11 @@ onBeforeUnmount(() => {
       </div>
     </FaModal>
 
-    <!-- 添加传感器弹窗 -->
+    <!-- 新增 / 编辑传感器弹窗 -->
     <FaModal
-      v-model="showAddSensorDialog" title="添加传感器" show-cancel-button @confirm="addSensor"
-      @cancel="showAddSensorDialog = false"
+      v-model="showSensorDialog" :title="sensorDialogMode === 'add' ? '添加传感器' : '编辑传感器'"
+      show-cancel-button :confirm-button-loading="sensorSaving" @confirm="saveSensor"
+      @cancel="showSensorDialog = false"
     >
       <div class="py-2 flex flex-col gap-4">
         <div class="flex flex-col gap-1">
@@ -904,7 +1096,7 @@ onBeforeUnmount(() => {
         </div>
         <div class="flex flex-col gap-1">
           <label class="text-sm font-medium">标识名 (identifier)</label>
-          <FaInput v-model="sensorForm.identifier" placeholder="如：temperature" />
+          <FaInput v-model="sensorForm.identifier" placeholder="如：temperature" :disabled="sensorDialogMode === 'edit'" />
         </div>
         <div class="flex flex-col gap-1">
           <label class="text-sm font-medium">传输类型</label>

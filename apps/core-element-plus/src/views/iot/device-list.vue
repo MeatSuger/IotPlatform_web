@@ -70,15 +70,17 @@ function normalize(row: any): DeviceRow {
 }
 
 const tableColumns = computed<TableColumn<DeviceRow>[]>(() => [
-  { accessorKey: 'deviceName', header: '设备名称', width: 'auto' },
+  { type: 'selection' },
+  { accessorKey: 'deviceName', header: '设备名称', width: 160 },
   { accessorKey: 'deviceId', header: '设备ID' },
   { accessorKey: 'deviceType', header: '设备类型', width: 120, align: 'center' },
+  { accessorKey: 'firmwareVersion', header: '固件版本', width: 110, align: 'center' },
   { accessorKey: 'status', header: '状态', width: 90, align: 'center' },
   { accessorKey: 'lastActiveTime', header: '最后活跃', width: 180 },
   { accessorKey: 'location', header: '位置', width: 120 },
   {
     id: 'more',
-    header: '',
+    header: '操作',
     width: 60,
     align: 'center',
     fixed: 'right',
@@ -256,6 +258,7 @@ onActivated(() => {
       <template v-if="viewMode === 'list'">
         <FaTable
           table-root-class="rounded-lg overflow-hidden"
+          table-class="table-fixed"
           :class="{ 'min-h-0 flex-1': tableAutoHeight }"
           row-key="id"
           selectable
@@ -275,12 +278,14 @@ onActivated(() => {
             {{ formatTime(value) }}
           </template>
           <template #cell-deviceName="{ row }">
-            <div class="group flex flex-col cursor-pointer" @click="onEdit(row.original)">
-              <span class="text-primary leading-tight font-semibold whitespace-nowrap">{{ row.original.deviceName }}</span>
-              <span class="text-xs text-primary leading-tight opacity-0 transition-opacity group-hover:opacity-100">
-                编辑
-              </span>
-            </div>
+            <FaTooltip :delay="100" side="bottom" align="start">
+              <div class="min-w-0 cursor-pointer" @click="onEdit(row.original)">
+                <span class="text-primary leading-tight font-semibold underline decoration-1 underline-offset-2 block truncate hover:text-primary/80">{{ row.original.deviceName }}</span>
+              </div>
+              <template #content>
+                <span class="cursor-pointer whitespace-nowrap hover:opacity-70" @click.stop="onEdit(row.original)">编辑</span>
+              </template>
+            </FaTooltip>
           </template>
           <template #cell-deviceId="{ value }">
             <span>{{ value }}</span>
@@ -289,6 +294,7 @@ onActivated(() => {
             <FaDropdown
               :items="[
                 [
+                  { label: '编辑', handle: () => onEdit(row.original) },
                   { label: '删除', variant: 'destructive', handle: () => onDel(row.original) },
                 ],
               ]"
@@ -315,7 +321,12 @@ onActivated(() => {
             @click="onEdit(device)"
           >
             <div class="px-4 py-2.5 border-b flex gap-2 items-center">
-              <span class="text-primary font-semibold min-w-0 truncate">{{ device.deviceName }}</span>
+              <FaTooltip :delay="100" side="bottom" align="start">
+                <span class="text-primary font-semibold underline decoration-1 underline-offset-2 min-w-0 truncate hover:text-primary/80">{{ device.deviceName }}</span>
+                <template #content>
+                  <span class="cursor-pointer whitespace-nowrap hover:opacity-70" @click.stop="onEdit(device)">编辑</span>
+                </template>
+              </FaTooltip>
               <div class="ml-auto flex shrink-0 gap-1.5 items-center">
                 <FaTag :variant="device.status === 'ONLINE' ? 'default' : 'secondary'">
                   {{ device.status === 'ONLINE' ? '在线' : '离线' }}
@@ -338,7 +349,7 @@ onActivated(() => {
             <div class="text-sm px-4 py-3 flex flex-col gap-2">
               <div class="flex gap-3 items-center justify-between">
                 <span class="text-gray-500 shrink-0">设备ID</span>
-                <span class="font-medium min-w-0 truncate">{{ device.deviceId }}</span>
+                <span class="font-medium min-w-0 truncate">{{ device.deviceId || '-' }}</span>
               </div>
               <div class="flex gap-3 items-center justify-between">
                 <span class="text-gray-500 shrink-0">设备类型</span>
@@ -352,9 +363,9 @@ onActivated(() => {
                 <span class="text-gray-500 shrink-0">最后活跃</span>
                 <span class="font-medium min-w-0 truncate">{{ formatTime(device.lastActiveTime) }}</span>
               </div>
-              <div v-if="device.ipAddress" class="flex gap-3 items-center justify-between">
+              <div class="flex gap-3 items-center justify-between">
                 <span class="text-gray-500 shrink-0">IP</span>
-                <span class="font-medium min-w-0 truncate">{{ device.ipAddress }}</span>
+                <span class="font-medium min-w-0 truncate">{{ device.ipAddress || '-' }}</span>
               </div>
             </div>
             <div class="px-4 py-2.5 border-t bg-accent/50">

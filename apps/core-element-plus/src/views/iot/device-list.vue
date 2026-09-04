@@ -70,7 +70,13 @@ function normalize(row: any): DeviceRow {
 }
 
 const tableColumns = computed<TableColumn<DeviceRow>[]>(() => [
-  { type: 'selection' },
+  ...(batch.value.enable
+    ? [{
+      type: 'selection',
+      fixed: 'left',
+      width: 48,
+    } satisfies TableColumn<DeviceRow>]
+    : []),
   { accessorKey: 'deviceName', header: '设备名称', width: 160 },
   { accessorKey: 'deviceId', header: '设备ID' },
   { accessorKey: 'deviceType', header: '设备类型', width: 120, align: 'center' },
@@ -79,13 +85,17 @@ const tableColumns = computed<TableColumn<DeviceRow>[]>(() => [
   { accessorKey: 'lastActiveTime', header: '最后活跃', width: 180 },
   { accessorKey: 'location', header: '位置', width: 120 },
   {
-    id: 'more',
+    id: 'operation',
     header: '操作',
-    width: 60,
+    width: 100,
     align: 'center',
     fixed: 'right',
   },
 ])
+
+function switchAutoHeight(enable: boolean) {
+  tableAutoHeight.value = enable
+}
 
 function formatTime(val: any): string {
   if (!val) {
@@ -189,7 +199,21 @@ onActivated(() => {
 
 <template>
   <div :class="{ 'absolute flex flex-col size-full': tableAutoHeight }">
-    <FaPageHeader title="设备信息" class="mb-0" />
+    <FaPageHeader title="设备信息" class="mb-0">
+      <template #description>
+        <div class="flex gap-3 items-center">
+          <span class="text-sm shrink-0">列表高度</span>
+          <FaButtonGroup>
+            <FaButton :variant="!tableAutoHeight ? 'default' : 'outline'" size="sm" @click="switchAutoHeight(false)">
+              默认
+            </FaButton>
+            <FaButton :variant="tableAutoHeight ? 'default' : 'outline'" size="sm" @click="switchAutoHeight(true)">
+              自适应
+            </FaButton>
+          </FaButtonGroup>
+        </div>
+      </template>
+    </FaPageHeader>
     <FaPageMain :class="{ 'flex-1 overflow-auto': tableAutoHeight }" :main-class="{ 'flex-1 flex flex-col overflow-auto': tableAutoHeight }">
       <FaSearchBar :show-toggle="false">
         <template #default="{ fold, toggle }">
@@ -257,6 +281,7 @@ onActivated(() => {
       </div>
       <template v-if="viewMode === 'list'">
         <FaTable
+          v-loading="loading"
           table-root-class="rounded-lg overflow-hidden"
           table-class="table-fixed"
           :class="{ 'min-h-0 flex-1': tableAutoHeight }"
@@ -290,19 +315,23 @@ onActivated(() => {
           <template #cell-deviceId="{ value }">
             <span>{{ value }}</span>
           </template>
-          <template #cell-more="{ row }">
-            <FaDropdown
-              :items="[
-                [
-                  { label: '编辑', handle: () => onEdit(row.original) },
-                  { label: '删除', variant: 'destructive', handle: () => onDel(row.original) },
-                ],
-              ]"
-            >
-              <FaButton variant="outline" size="icon-sm">
-                <FaIcon name="i-ri:more-2-fill" />
+          <template #cell-operation="{ row }">
+            <div class="flex-center gap-2">
+              <FaButton variant="outline" size="icon-sm" @click="onEdit(row.original)">
+                <FaIcon name="i-ri:edit-line" />
               </FaButton>
-            </FaDropdown>
+              <FaDropdown
+                :items="[
+                  [
+                    { label: '删除', variant: 'destructive', handle: () => onDel(row.original) },
+                  ],
+                ]"
+              >
+                <FaButton variant="outline" size="icon-sm">
+                  <FaIcon name="i-ri:more-line" />
+                </FaButton>
+              </FaDropdown>
+            </div>
           </template>
         </FaTable>
       </template>

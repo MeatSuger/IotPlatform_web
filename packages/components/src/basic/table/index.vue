@@ -5,6 +5,7 @@ import type {
   Column,
   ColumnDef,
   ColumnPinningState,
+  ColumnVisibilityState,
   DisplayColumnDef,
   ExpandedState,
   Header,
@@ -16,15 +17,20 @@ import type {
   TableOptions,
   Table as TanStackTable,
   Updater,
-  VisibilityState,
 } from '@tanstack/vue-table'
 import type { CSSProperties, HTMLAttributes } from 'vue'
 import {
+  columnOrderingFeature,
+  columnPinningFeature,
+  columnSizingFeature,
+  columnVisibilityFeature,
+  createExpandedRowModel,
   FlexRender,
-  getCoreRowModel,
-  getExpandedRowModel,
-  isFunction,
-  useVueTable,
+  rowExpandingFeature,
+  rowSelectionFeature,
+  rowSortingFeature,
+  tableFeatures,
+  useTable,
 } from '@tanstack/vue-table'
 import { computed, ref, watch } from 'vue'
 import { cn } from '#utils'
@@ -43,10 +49,21 @@ import {
   TableHeader,
   TableRow,
 } from './table'
-import { valueUpdater } from './table/utils'
 
 const SELECTION_COLUMN_ID = '__fa_table_selection__'
 const TABLE_HEADER_ROW_HEIGHT = 40
+const faTableFeatures = tableFeatures({
+  columnOrderingFeature,
+  columnSizingFeature,
+  columnPinningFeature,
+  columnVisibilityFeature,
+  rowExpandingFeature,
+  expandedRowModel: createExpandedRowModel(),
+  rowSelectionFeature,
+  rowSortingFeature,
+})
+
+type FaTableFeatures = typeof faTableFeatures
 
 type ColumnSlotName = `cell-${string}` | `header-${string}` | `footer-${string}`
 type TableSlots<TData extends RowData> = {
@@ -61,8 +78,9 @@ type TableSlots<TData extends RowData> = {
   [key: `footer-${string}`]: ((props: TableFooterSlotProps<TData, any>) => any) | undefined
 }
 type ColumnClass<TContext> = HTMLAttributes['class'] | ((context: TContext) => HTMLAttributes['class'])
-type RowClass<TData extends RowData> = HTMLAttributes['class'] | ((row: Row<TData>) => HTMLAttributes['class'])
+type RowClass<TData extends RowData> = HTMLAttributes['class'] | ((row: Row<FaTableFeatures, TData>) => HTMLAttributes['class'])
 type RowKey<TData extends RowData> = keyof TData | string | ((row: TData, index: number) => string | number)
+type TablePinnedPosition = 'start' | 'end'
 
 export type TableAlign = 'left' | 'center' | 'right'
 export type TableColumnFixed = 'left' | 'right'
@@ -72,10 +90,10 @@ export type TableExpandedState = ExpandedState
 
 interface TableColumnOptions<TData extends RowData = RowData, TValue = unknown> {
   align?: TableAlign
-  cellClass?: ColumnClass<CellContext<TData, TValue>>
+  cellClass?: ColumnClass<CellContext<FaTableFeatures, TData, TValue>>
   class?: HTMLAttributes['class']
   fixed?: boolean | TableColumnFixed
-  headerClass?: ColumnClass<HeaderContext<TData, TValue>>
+  headerClass?: ColumnClass<HeaderContext<FaTableFeatures, TData, TValue>>
   label?: string
   maxWidth?: number | string
   minWidth?: number | string
@@ -84,7 +102,7 @@ interface TableColumnOptions<TData extends RowData = RowData, TValue = unknown> 
 }
 
 export type TableSelectionColumn<TData extends RowData = RowData>
-  = Partial<DisplayColumnDef<TData, unknown>>
+  = Partial<DisplayColumnDef<FaTableFeatures, TData, unknown>>
     & TableColumnOptions<TData, unknown>
     & {
       type: 'selection'
@@ -93,39 +111,39 @@ export type TableSelectionColumn<TData extends RowData = RowData>
     }
 
 export type TableColumn<TData extends RowData = RowData, TValue = unknown>
-  = | (ColumnDef<TData, TValue> & TableColumnOptions<TData, TValue> & {
+  = | (ColumnDef<FaTableFeatures, TData, TValue> & TableColumnOptions<TData, TValue> & {
     type?: never
     columns?: TableColumn<TData, any>[]
   })
   | TableSelectionColumn<TData>
 
 export interface TableCellSlotProps<TData extends RowData = RowData, TValue = unknown> {
-  cell: Cell<TData, TValue>
-  column: Column<TData, TValue>
+  cell: Cell<FaTableFeatures, TData, TValue>
+  column: Column<FaTableFeatures, TData, TValue>
   index: number
-  row: Row<TData>
-  table: TanStackTable<TData>
+  row: Row<FaTableFeatures, TData>
+  table: TanStackTable<FaTableFeatures, TData>
   value: TValue
 }
 
 export interface TableHeaderSlotProps<TData extends RowData = RowData, TValue = unknown> {
-  column: Column<TData, TValue>
-  header: Header<TData, TValue>
-  table: TanStackTable<TData>
+  column: Column<FaTableFeatures, TData, TValue>
+  header: Header<FaTableFeatures, TData, TValue>
+  table: TanStackTable<FaTableFeatures, TData>
 }
 
 export interface TableFooterSlotProps<TData extends RowData = RowData, TValue = unknown> {
-  column: Column<TData, TValue>
-  header: Header<TData, TValue>
-  table: TanStackTable<TData>
+  column: Column<FaTableFeatures, TData, TValue>
+  header: Header<FaTableFeatures, TData, TValue>
+  table: TanStackTable<FaTableFeatures, TData>
 }
 
 export interface TableEmptySlotProps<TData extends RowData = RowData> {
-  table: TanStackTable<TData>
+  table: TanStackTable<FaTableFeatures, TData>
 }
 
 export interface TableToolbarSlotProps<TData extends RowData = RowData> {
-  table: TanStackTable<TData>
+  table: TanStackTable<FaTableFeatures, TData>
 }
 
 export interface TableProps<TData extends RowData = RowData> {
@@ -142,8 +160,8 @@ export interface TableProps<TData extends RowData = RowData> {
   enableMultiSort?: boolean
   enableSortingRemoval?: boolean
   expanded?: ExpandedState
-  getRowId?: TableOptions<TData>['getRowId']
-  getSubRows?: TableOptions<TData>['getSubRows']
+  getRowId?: TableOptions<FaTableFeatures, TData>['getRowId']
+  getSubRows?: TableOptions<FaTableFeatures, TData>['getSubRows']
   headerClass?: HTMLAttributes['class']
   headerRowClass?: HTMLAttributes['class']
   indentSize?: number
@@ -188,17 +206,17 @@ const props = withDefaults(defineProps<TableProps<TData>>(), {
 })
 
 const emit = defineEmits<{
-  'expandedChange': [expanded: ExpandedState, table: TanStackTable<TData>]
+  'expandedChange': [expanded: ExpandedState, table: TanStackTable<FaTableFeatures, TData>]
   'rowClick': [row: TData, index: number, event: MouseEvent]
   'selectionChange': [rows: TData[], rowSelection: RowSelectionState]
-  'sortingChange': [sorting: SortingState, table: TanStackTable<TData>]
+  'sortingChange': [sorting: SortingState, table: TanStackTable<FaTableFeatures, TData>]
   'update:expanded': [expanded: ExpandedState]
 }>()
 
 const slots = defineSlots<TableSlots<TData>>()
 
 const rowSelection = ref<RowSelectionState>({})
-const columnVisibilityState = ref<VisibilityState>({})
+const columnVisibilityState = ref<ColumnVisibilityState>({})
 const sortingState = ref<SortingState>(props.sorting ?? props.defaultSorting ?? [])
 const expandedState = ref<ExpandedState>(props.expanded ?? props.defaultExpanded ?? {})
 const isSortingControlled = computed(() => props.sorting !== undefined)
@@ -208,13 +226,17 @@ function isSelectionColumnDef(column: TableColumn<TData, any>): column is TableS
   return column.type === 'selection'
 }
 
-function normalizeFixed(value?: boolean | TableColumnFixed): TableColumnFixed | undefined {
+function normalizeFixed(value?: boolean | TableColumnFixed): TablePinnedPosition | undefined {
   if (value === true) {
-    return 'left'
+    return 'start'
   }
 
-  if (value === 'left' || value === 'right') {
-    return value
+  if (value === 'left') {
+    return 'start'
+  }
+
+  if (value === 'right') {
+    return 'end'
   }
 
   return undefined
@@ -286,7 +308,7 @@ function normalizeColumn(column: TableColumn<TData, any>): TableColumn<TData, an
 
 const normalizedColumns = computed<TableColumn<TData, any>[]>(() => props.columns.map(column => normalizeColumn(column)))
 
-const resolvedColumns = computed<ColumnDef<TData, any>[]>(() => normalizedColumns.value as ColumnDef<TData, any>[])
+const resolvedColumns = computed<ColumnDef<FaTableFeatures, TData, any>[]>(() => normalizedColumns.value as ColumnDef<FaTableFeatures, TData, any>[])
 
 function findSelectionColumn(columns: TableColumn<TData, any>[]): TableSelectionColumn<TData> | undefined {
   for (const column of columns) {
@@ -306,10 +328,10 @@ function findSelectionColumn(columns: TableColumn<TData, any>[]): TableSelection
 const selectionColumnDef = computed(() => findSelectionColumn(normalizedColumns.value))
 
 function getColumnPinningState(columns: TableColumn<TData, any>[]) {
-  const left = new Set<string>()
-  const right = new Set<string>()
+  const start = new Set<string>()
+  const end = new Set<string>()
 
-  function collect(items: TableColumn<TData, any>[], inheritedFixed?: TableColumnFixed) {
+  function collect(items: TableColumn<TData, any>[], inheritedFixed?: TablePinnedPosition) {
     items.forEach((column) => {
       const fixed = normalizeFixed(column.fixed) ?? inheritedFixed
 
@@ -323,13 +345,13 @@ function getColumnPinningState(columns: TableColumn<TData, any>[]) {
         return
       }
 
-      if (fixed === 'left') {
-        left.add(columnId)
-        right.delete(columnId)
+      if (fixed === 'start') {
+        start.add(columnId)
+        end.delete(columnId)
       }
       else {
-        right.add(columnId)
-        left.delete(columnId)
+        end.add(columnId)
+        start.delete(columnId)
       }
     })
   }
@@ -337,14 +359,14 @@ function getColumnPinningState(columns: TableColumn<TData, any>[]) {
   collect(columns)
 
   return {
-    left: [...left],
-    right: [...right],
+    start: [...start],
+    end: [...end],
   } satisfies ColumnPinningState
 }
 
-const columnPinning = computed<ColumnPinningState>(() => getColumnPinningState(resolvedColumns.value as TableColumn<TData, any>[]))
+const columnPinning = computed<ColumnPinningState>(() => getColumnPinningState(normalizedColumns.value))
 
-function resolveRowId(row: TData, index: number, parent?: Row<TData>): string {
+function resolveRowId(row: TData, index: number, parent?: Row<FaTableFeatures, TData>): string {
   if (props.getRowId) {
     return props.getRowId(row, index, parent)
   }
@@ -363,7 +385,7 @@ function resolveRowId(row: TData, index: number, parent?: Row<TData>): string {
   return parent ? `${parent.id}.${index}` : String(index)
 }
 
-function resolveSubRows(row: TData, index: number): TData[] | undefined {
+function resolveSubRows(row: TData, index: number): readonly TData[] | undefined {
   if (!props.tree) {
     return undefined
   }
@@ -376,7 +398,7 @@ function resolveSubRows(row: TData, index: number): TData[] | undefined {
   return Array.isArray(children) ? children as TData[] : undefined
 }
 
-function isRowSelectionDisabled(row: Row<TData>) {
+function isRowSelectionDisabled(row: Row<FaTableFeatures, TData>) {
   return selectionColumnDef.value?.disabled?.(row.original, row.index) ?? false
 }
 
@@ -395,16 +417,22 @@ function syncSingleRowSelection() {
 }
 
 function handleRowSelectionChange(updaterOrValue: Updater<RowSelectionState>) {
-  valueUpdater(updaterOrValue, rowSelection)
+  rowSelection.value = typeof updaterOrValue === 'function'
+    ? updaterOrValue(rowSelection.value)
+    : updaterOrValue
   syncSingleRowSelection()
 }
 
-function handleColumnVisibilityChange(updaterOrValue: Updater<VisibilityState>) {
-  valueUpdater(updaterOrValue, columnVisibilityState)
+function handleColumnVisibilityChange(updaterOrValue: Updater<ColumnVisibilityState>) {
+  columnVisibilityState.value = typeof updaterOrValue === 'function'
+    ? updaterOrValue(columnVisibilityState.value)
+    : updaterOrValue
 }
 
 function handleSortingChange(updaterOrValue: Updater<SortingState>) {
-  const nextSorting = isFunction(updaterOrValue) ? updaterOrValue(sortingState.value) : updaterOrValue
+  const nextSorting = typeof updaterOrValue === 'function'
+    ? updaterOrValue(sortingState.value)
+    : updaterOrValue
 
   if (!isSortingControlled.value) {
     sortingState.value = nextSorting
@@ -414,7 +442,9 @@ function handleSortingChange(updaterOrValue: Updater<SortingState>) {
 }
 
 function handleExpandedChange(updaterOrValue: Updater<ExpandedState>) {
-  const nextExpanded = isFunction(updaterOrValue) ? updaterOrValue(expandedState.value) : updaterOrValue
+  const nextExpanded = typeof updaterOrValue === 'function'
+    ? updaterOrValue(expandedState.value)
+    : updaterOrValue
 
   if (!isExpandedControlled.value) {
     expandedState.value = nextExpanded
@@ -424,7 +454,16 @@ function handleExpandedChange(updaterOrValue: Updater<ExpandedState>) {
   emit('expandedChange', nextExpanded, table)
 }
 
-const table = useVueTable<TData>({
+const tableState = computed(() => ({
+  columnVisibility: columnVisibilityState.value,
+  columnPinning: columnPinning.value,
+  rowSelection: rowSelection.value,
+  expanded: expandedState.value,
+  sorting: sortingState.value,
+}))
+
+const table = useTable<FaTableFeatures, TData>({
+  features: faTableFeatures,
   data: computed(() => props.data),
   get enableMultiSort() {
     return props.enableMultiSort
@@ -442,11 +481,6 @@ const table = useVueTable<TData>({
   get columns() {
     return resolvedColumns.value
   },
-  get rowCount() {
-    return props.data.length
-  },
-  getCoreRowModel: getCoreRowModel(),
-  getExpandedRowModel: getExpandedRowModel(),
   getRowId: resolveRowId,
   getSubRows: resolveSubRows,
   get manualExpanding() {
@@ -460,33 +494,16 @@ const table = useVueTable<TData>({
   get sortDescFirst() {
     return props.sortDescFirst
   },
-  state: {
-    get columnVisibility() {
-      return columnVisibilityState.value
-    },
-    get columnPinning() {
-      return columnPinning.value
-    },
-    get rowSelection() {
-      return rowSelection.value
-    },
-    get expanded() {
-      return expandedState.value
-    },
-    get sorting() {
-      return sortingState.value
-    },
-  },
+  state: tableState,
 })
 
-function getTableRows(_data: TData[], _rowSelection: RowSelectionState, _columnVisibility: VisibilityState, _sorting: SortingState) {
-  return table.getRowModel().rows
-}
-
 const selectedRows = computed(() => table.getSelectedRowModel().rows.map(row => row.original))
-const tableRows = computed(() => getTableRows(props.data, rowSelection.value, columnVisibilityState.value, sortingState.value))
+const tableRows = computed(() => {
+  void tableState.value
+  return table.getRowModel().rows
+})
 const visibleColumnCount = computed(() => {
-  void columnVisibilityState.value
+  void tableState.value.columnVisibility
   return Math.max(table.getVisibleLeafColumns().length, 1)
 })
 const isSingleSelectionMode = computed(() => props.selectable && !props.multiple && Boolean(selectionColumnDef.value))
@@ -497,7 +514,7 @@ const stripeInteractionClass = computed(() => props.stripe ? '[&:hover>td]:bg-mu
 const hasToolbar = computed(() => props.columnVisibility || Boolean(slots.toolbar))
 const columnVisibilityColumns = computed(() => {
   void resolvedColumns.value
-  void columnVisibilityState.value
+  void tableState.value.columnVisibility
 
   return table.getAllLeafColumns().filter(column => column.getCanHide())
 })
@@ -548,7 +565,7 @@ watch(
   { deep: true },
 )
 
-function isSelectionColumn(column: Column<TData, unknown>) {
+function isSelectionColumn(column: Column<FaTableFeatures, TData, unknown>) {
   return isSelectionColumnDef(column.columnDef as TableColumn<TData, unknown>)
 }
 
@@ -556,11 +573,11 @@ function getColumnSlotName(prefix: 'cell' | 'header' | 'footer', columnId: strin
   return `${prefix}-${columnId}`
 }
 
-function getHeaderSlotName(header: Header<TData, unknown>) {
+function getHeaderSlotName(header: Header<FaTableFeatures, TData, unknown>) {
   return getColumnSlotName('header', header.column.id)
 }
 
-function getCellSlotName(cell: Cell<TData, unknown>) {
+function getCellSlotName(cell: Cell<FaTableFeatures, TData, unknown>) {
   return getColumnSlotName('cell', cell.column.id)
 }
 
@@ -568,7 +585,7 @@ function hasColumnSlot(name: ColumnSlotName) {
   return Boolean(slots[name])
 }
 
-function getColumnVisibilityLabel(column: Column<TData, unknown>) {
+function getColumnVisibilityLabel(column: Column<FaTableFeatures, TData, unknown>) {
   const columnDef = column.columnDef as TableColumn<TData, unknown>
 
   if (columnDef.label) {
@@ -586,7 +603,7 @@ function getColumnVisibilityLabel(column: Column<TData, unknown>) {
   return column.id
 }
 
-function getHeaderSlotProps(header: Header<TData, unknown>): any {
+function getHeaderSlotProps(header: Header<FaTableFeatures, TData, unknown>): any {
   return {
     column: header.column,
     header,
@@ -594,7 +611,7 @@ function getHeaderSlotProps(header: Header<TData, unknown>): any {
   }
 }
 
-function getHeaderAriaSort(header: Header<TData, unknown>) {
+function getHeaderAriaSort(header: Header<FaTableFeatures, TData, unknown>) {
   if (!props.sortable || !header.column.getCanSort()) {
     return undefined
   }
@@ -612,7 +629,7 @@ function getHeaderAriaSort(header: Header<TData, unknown>) {
   return undefined
 }
 
-function getCellSlotProps(cell: Cell<TData, unknown>, row: Row<TData>): any {
+function getCellSlotProps(cell: Cell<FaTableFeatures, TData, unknown>, row: Row<FaTableFeatures, TData>): any {
   return {
     cell,
     column: cell.column,
@@ -623,7 +640,7 @@ function getCellSlotProps(cell: Cell<TData, unknown>, row: Row<TData>): any {
   }
 }
 
-function shouldRenderTreeCell(cell: Cell<TData, unknown>, row: Row<TData>) {
+function shouldRenderTreeCell(cell: Cell<FaTableFeatures, TData, unknown>, row: Row<FaTableFeatures, TData>) {
   if (!props.tree || isSelectionColumn(cell.column)) {
     return false
   }
@@ -631,17 +648,17 @@ function shouldRenderTreeCell(cell: Cell<TData, unknown>, row: Row<TData>) {
   return row.getVisibleCells().find(item => !isSelectionColumn(item.column))?.id === cell.id
 }
 
-function getTreeCellIndentStyle(row: Row<TData>): CSSProperties {
+function getTreeCellIndentStyle(row: Row<FaTableFeatures, TData>): CSSProperties {
   return {
     paddingLeft: `${row.depth * props.indentSize}px`,
   }
 }
 
-function getTreeToggleIconName(row: Row<TData>) {
+function getTreeToggleIconName(row: Row<FaTableFeatures, TData>) {
   return row.getIsExpanded() ? 'i-lucide:chevron-down' : 'i-lucide:chevron-right'
 }
 
-function handleToggleRowExpanded(row: Row<TData>) {
+function handleToggleRowExpanded(row: Row<FaTableFeatures, TData>) {
   row.toggleExpanded()
 }
 
@@ -665,7 +682,7 @@ function resolveSize(size?: number | string) {
   return typeof size === 'number' ? `${size}px` : size
 }
 
-function getColumnStyle(column: Column<TData, unknown>): CSSProperties | undefined {
+function getColumnStyle(column: Column<FaTableFeatures, TData, unknown>): CSSProperties | undefined {
   const columnDef = column.columnDef as TableColumn<TData, unknown>
   const pin = column.getIsPinned()
   const width = resolveSize(columnDef.width ?? (pin ? column.getSize() : columnDef.size && columnDef.size !== 150 ? columnDef.size : undefined))
@@ -687,13 +704,13 @@ function getColumnStyle(column: Column<TData, unknown>): CSSProperties | undefin
     style.maxWidth = maxWidth
   }
 
-  if (pin === 'left') {
-    style.left = `${column.getStart('left')}px`
+  if (pin === 'start') {
+    style.insetInlineStart = `${column.getStart('start')}px`
     style.position = 'sticky'
   }
-  else if (pin === 'right') {
+  else if (pin === 'end') {
     style.position = 'sticky'
-    style.right = `${column.getAfter('right')}px`
+    style.insetInlineEnd = `${column.getAfter('end')}px`
   }
 
   if (!Object.keys(style).length) {
@@ -710,7 +727,7 @@ function resolveColumnClass<TContext>(
   return typeof columnClass === 'function' ? columnClass(context) : columnClass
 }
 
-function getHeaderClass(header: Header<TData, unknown>) {
+function getHeaderClass(header: Header<FaTableFeatures, TData, unknown>) {
   const columnDef = header.column.columnDef as TableColumn<TData, unknown>
   return cn(
     'sticky z-2 bg-muted text-muted-foreground after:pointer-events-none after:absolute after:inset-x-0 after:bottom-0 after:h-px after:bg-border after:content-empty',
@@ -725,14 +742,14 @@ function getHeaderClass(header: Header<TData, unknown>) {
   )
 }
 
-function getHeaderStyle(header: Header<TData, unknown>, headerGroupIndex: number): CSSProperties {
+function getHeaderStyle(header: Header<FaTableFeatures, TData, unknown>, headerGroupIndex: number): CSSProperties {
   return {
     ...getColumnStyle(header.column),
     top: `${headerGroupIndex * TABLE_HEADER_ROW_HEIGHT}px`,
   }
 }
 
-function getHeaderContentClass(header: Header<TData, unknown>) {
+function getHeaderContentClass(header: Header<FaTableFeatures, TData, unknown>) {
   const columnDef = header.column.columnDef as TableColumn<TData, unknown>
 
   return cn(
@@ -742,7 +759,7 @@ function getHeaderContentClass(header: Header<TData, unknown>) {
   )
 }
 
-function getCellClass(cell: Cell<TData, unknown>) {
+function getCellClass(cell: Cell<FaTableFeatures, TData, unknown>) {
   const columnDef = cell.column.columnDef as TableColumn<TData, unknown>
   return cn(
     getAlignClass(columnDef.align),
@@ -755,7 +772,7 @@ function getCellClass(cell: Cell<TData, unknown>) {
   )
 }
 
-function getSortedColumnClass(column: Column<TData, unknown>, area: 'cell' | 'header') {
+function getSortedColumnClass(column: Column<FaTableFeatures, TData, unknown>, area: 'cell' | 'header') {
   if (!props.sortable || !column.getIsSorted()) {
     return undefined
   }
@@ -765,7 +782,7 @@ function getSortedColumnClass(column: Column<TData, unknown>, area: 'cell' | 'he
     : '!bg-primary/10'
 }
 
-function getPinnedColumnClass(column: Column<TData, unknown>, area: 'cell' | 'header') {
+function getPinnedColumnClass(column: Column<FaTableFeatures, TData, unknown>, area: 'cell' | 'header') {
   const pin = column.getIsPinned()
 
   if (!pin) {
@@ -776,34 +793,34 @@ function getPinnedColumnClass(column: Column<TData, unknown>, area: 'cell' | 'he
     'sticky',
     area === 'header' ? 'z-3' : 'z-1',
     area === 'cell' && 'bg-background transition-colors',
-    pin === 'left' && column.getIsLastColumn('left') && 'shadow-[4px_0_6px_-4px_rgb(0_0_0/0.18)]',
-    pin === 'right' && column.getIsFirstColumn('right') && 'shadow-[-4px_0_6px_-4px_rgb(0_0_0/0.18)]',
+    pin === 'start' && column.getIsLastColumn('start') && 'shadow-[4px_0_6px_-4px_rgb(0_0_0/0.18)]',
+    pin === 'end' && column.getIsFirstColumn('end') && 'shadow-[-4px_0_6px_-4px_rgb(0_0_0/0.18)]',
   )
 }
 
-function isLastVisibleLeafColumn(column: Column<TData, unknown>) {
+function isLastVisibleLeafColumn(column: Column<FaTableFeatures, TData, unknown>) {
   return table.getVisibleLeafColumns().at(-1)?.id === column.id
 }
 
-function getNextVisibleLeafColumn(column: Column<TData, unknown>) {
+function getNextVisibleLeafColumn(column: Column<FaTableFeatures, TData, unknown>) {
   const columns = table.getVisibleLeafColumns()
   const columnIndex = columns.findIndex(item => item.id === column.id)
   return columnIndex === -1 ? undefined : columns[columnIndex + 1]
 }
 
-function getVisiblePinnedColumns(pin: TableColumnFixed) {
-  return table.getVisibleLeafColumns().filter(column => column.getIsPinned() === pin)
+function getVisiblePinnedColumns(pin: TablePinnedPosition) {
+  return table.getPinnedVisibleLeafColumns(pin)
 }
 
-function isFirstVisiblePinnedColumn(column: Column<TData, unknown>, pin: TableColumnFixed) {
+function isFirstVisiblePinnedColumn(column: Column<FaTableFeatures, TData, unknown>, pin: TablePinnedPosition) {
   return getVisiblePinnedColumns(pin).at(0)?.id === column.id
 }
 
-function isLastVisiblePinnedColumn(column: Column<TData, unknown>, pin: TableColumnFixed) {
+function isLastVisiblePinnedColumn(column: Column<FaTableFeatures, TData, unknown>, pin: TablePinnedPosition) {
   return getVisiblePinnedColumns(pin).at(-1)?.id === column.id
 }
 
-function getHeaderBorderClass(header: Header<TData, unknown>) {
+function getHeaderBorderClass(header: Header<FaTableFeatures, TData, unknown>) {
   if (!props.border) {
     return undefined
   }
@@ -812,54 +829,54 @@ function getHeaderBorderClass(header: Header<TData, unknown>) {
   const lastLeafColumn = leafColumns.at(-1) ?? header.column
   const pin = lastLeafColumn.getIsPinned()
 
-  if (pin === 'left') {
+  if (pin === 'start') {
     return cn(
-      !isFirstVisiblePinnedColumn(lastLeafColumn, 'left')
+      !isFirstVisiblePinnedColumn(lastLeafColumn, 'start')
       && 'before:pointer-events-none before:absolute before:inset-y-0 before:left-0 before:z-1 before:w-px before:bg-border before:content-empty',
-      isLastVisiblePinnedColumn(lastLeafColumn, 'left') && !isLastVisibleLeafColumn(lastLeafColumn)
+      isLastVisiblePinnedColumn(lastLeafColumn, 'start') && !isLastVisibleLeafColumn(lastLeafColumn)
       && 'bg-[linear-gradient(to_left,oklch(var(--border))_1px,transparent_1px)]',
     )
   }
 
-  if (pin === 'right') {
+  if (pin === 'end') {
     return 'before:pointer-events-none before:absolute before:inset-y-0 before:left-0 before:z-1 before:w-px before:bg-border before:content-empty'
   }
 
-  if (getNextVisibleLeafColumn(lastLeafColumn)?.getIsPinned() === 'right') {
+  if (getNextVisibleLeafColumn(lastLeafColumn)?.getIsPinned() === 'end') {
     return undefined
   }
 
   return isLastVisibleLeafColumn(lastLeafColumn) ? undefined : 'border-r'
 }
 
-function getCellBorderClass(cell: Cell<TData, unknown>) {
+function getCellBorderClass(cell: Cell<FaTableFeatures, TData, unknown>) {
   if (!props.border) {
     return undefined
   }
 
   const pin = cell.column.getIsPinned()
 
-  if (pin === 'left') {
+  if (pin === 'start') {
     return cn(
-      !isFirstVisiblePinnedColumn(cell.column, 'left')
+      !isFirstVisiblePinnedColumn(cell.column, 'start')
       && 'before:pointer-events-none before:absolute before:inset-y-0 before:left-0 before:z-1 before:w-px before:bg-border before:content-empty',
-      isLastVisiblePinnedColumn(cell.column, 'left') && !isLastVisibleLeafColumn(cell.column)
+      isLastVisiblePinnedColumn(cell.column, 'start') && !isLastVisibleLeafColumn(cell.column)
       && 'after:pointer-events-none after:absolute after:inset-y-0 after:right-0 after:z-1 after:w-px after:bg-border after:content-empty',
     )
   }
 
-  if (pin === 'right') {
+  if (pin === 'end') {
     return 'after:pointer-events-none after:absolute after:inset-y-0 after:left-0 after:z-1 after:w-px after:bg-border after:content-empty'
   }
 
-  if (getNextVisibleLeafColumn(cell.column)?.getIsPinned() === 'right') {
+  if (getNextVisibleLeafColumn(cell.column)?.getIsPinned() === 'end') {
     return undefined
   }
 
   return isLastVisibleLeafColumn(cell.column) ? undefined : 'border-r'
 }
 
-function getRowClass(row: Row<TData>, rowIndex: number) {
+function getRowClass(row: Row<FaTableFeatures, TData>, rowIndex: number) {
   return cn(
     'bg-background',
     '[&:hover>td[data-pinned]]:bg-muted [&[data-state=selected]>td[data-pinned]]:bg-muted',
@@ -875,18 +892,18 @@ function getHeaderCheckboxValue() {
     return true
   }
 
-  if (table.getIsSomeRowsSelected()) {
+  if (table.getIsSomeRowsSelected() && !table.getIsAllRowsSelected()) {
     return 'indeterminate'
   }
 
   return false
 }
 
-function shouldRenderSelectionHeader(header: Header<TData, unknown>) {
+function shouldRenderSelectionHeader(header: Header<FaTableFeatures, TData, unknown>) {
   return props.selectable && props.multiple && isSelectionColumn(header.column) && !header.column.columnDef.header
 }
 
-function getSortIconName(header: Header<TData, unknown>) {
+function getSortIconName(header: Header<FaTableFeatures, TData, unknown>) {
   const sorted = header.column.getIsSorted()
 
   if (sorted === 'desc') {
@@ -900,22 +917,22 @@ function getSortIconName(header: Header<TData, unknown>) {
   return 'i-lucide:arrow-up-down'
 }
 
-function getSortIconClass(header: Header<TData, unknown>) {
+function getSortIconClass(header: Header<FaTableFeatures, TData, unknown>) {
   return cn(
     'shrink-0 size-3.5',
     header.column.getIsSorted() ? 'text-primary' : 'text-muted-foreground/80',
   )
 }
 
-function shouldRenderSortIndex(header: Header<TData, unknown>) {
+function shouldRenderSortIndex(header: Header<FaTableFeatures, TData, unknown>) {
   return props.enableMultiSort && header.column.getSortIndex() > -1 && sortingState.value.length > 1
 }
 
-function getSortIndexLabel(header: Header<TData, unknown>) {
+function getSortIndexLabel(header: Header<FaTableFeatures, TData, unknown>) {
   return header.column.getSortIndex() + 1
 }
 
-function handleHeaderClick(header: Header<TData, unknown>, event: MouseEvent) {
+function handleHeaderClick(header: Header<FaTableFeatures, TData, unknown>, event: MouseEvent) {
   if (!props.sortable || !header.column.getCanSort()) {
     return
   }
@@ -927,7 +944,7 @@ function handleToggleAllRows(value: boolean | 'indeterminate') {
   table.toggleAllRowsSelected(value === true)
 }
 
-function handleToggleRow(row: Row<TData>, value: boolean | 'indeterminate') {
+function handleToggleRow(row: Row<FaTableFeatures, TData>, value: boolean | 'indeterminate') {
   row.toggleSelected(value === true)
 }
 
@@ -941,7 +958,7 @@ function handleSingleSelectionChange(value: unknown) {
   }
 }
 
-function handleRowClick(row: Row<TData>, event: MouseEvent) {
+function handleRowClick(row: Row<FaTableFeatures, TData>, event: MouseEvent) {
   emit('rowClick', row.original, row.index, event)
 }
 
@@ -968,7 +985,7 @@ defineExpose({
     </div>
     <component
       :is="tableRootComponent"
-      :class="cn('size-full', props.border && 'border', props.tableRootClass)"
+      :class="cn('size-full', props.border && 'border rounded-lg overflow-hidden', props.tableRootClass)"
       :model-value="tableRootModelValue"
       @update:model-value="handleSingleSelectionChange"
     >
@@ -1011,8 +1028,7 @@ defineExpose({
                   />
                   <FlexRender
                     v-else
-                    :render="header.column.columnDef.header"
-                    :props="header.getContext()"
+                    :header="header"
                   />
                   <template v-if="props.sortable && header.column.getCanSort()">
                     <Icon :name="getSortIconName(header)" :class="getSortIconClass(header)" />
@@ -1086,8 +1102,7 @@ defineExpose({
                     </template>
                     <FlexRender
                       v-else
-                      :render="cell.column.columnDef.cell"
-                      :props="cell.getContext()"
+                      :cell="cell"
                     />
                   </div>
                 </div>
@@ -1116,8 +1131,7 @@ defineExpose({
                   </template>
                   <FlexRender
                     v-else
-                    :render="cell.column.columnDef.cell"
-                    :props="cell.getContext()"
+                    :cell="cell"
                   />
                 </template>
               </TableCell>

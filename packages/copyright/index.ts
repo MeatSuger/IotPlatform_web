@@ -64,7 +64,7 @@ function createSystemCopyrightPlugin(options: CopyrightOptions = {}): PluginOpti
     name: 'vite-plugin-system-copyright',
     apply: 'build',
     transform(code, id) {
-      if (!id.endsWith('/src/main.ts')) {
+      if (!/src\/main\.ts$/.test(id)) {
         return
       }
 

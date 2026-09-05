@@ -55,7 +55,7 @@ defineExpose({
     <ScrollAreaViewport
       ref="viewportRef"
       data-slot="scroll-area-viewport"
-      class="scroll-area-viewport outline-none rounded-[inherit] size-full transition-[color,box-shadow] focus-visible:outline-1 focus-visible:ring-[3px] focus-visible:ring-ring/50"
+      class="scroll-area-viewport outline-none rounded-[inherit] size-full transition-[color,box-shadow] focus-visible:outline-1 focus-visible:ring-3 focus-visible:ring-ring/50"
       :class="{
         'scroll-area-mask-vertical': props.mask && !props.horizontal,
         'scroll-area-mask-horizontal': props.mask && props.horizontal,

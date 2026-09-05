@@ -109,7 +109,7 @@ function handleJump() {
       <PaginationFirst size="icon-sm" class="size-8 rtl:rotate-180" />
       <PaginationPrevious size="icon-sm" class="size-8 rtl:rotate-180" />
       <template v-for="(item, index) in items" :key="index">
-        <PaginationItem v-if="item.type === 'page'" :value="item.value" :is-active="item.value === currentPage" size="icon-sm" class="size-8">
+        <PaginationItem v-if="item.type === 'page'" :value="item.value" :is-active="item.value === currentPage" size="icon-sm" class="min-w-8 w-auto">
           {{ item.value }}
         </PaginationItem>
         <PaginationEllipsis v-else :key="item.type" :index="index" />

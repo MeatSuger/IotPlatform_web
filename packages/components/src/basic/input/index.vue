@@ -60,7 +60,7 @@ defineExpose({
       v-bind="{
         ...omit(props, ['type', 'align', 'clearable', 'class', 'inputClass', 'startClass', 'endClass']),
         type,
-        class: cn('w-full flex-1 border-0 rounded-none bg-transparent ring-offset-transparent dark:bg-transparent focus-visible:ring-0 focus-visible:ring-transparent', props.inputClass),
+        class: cn('w-full flex-1 border-0 rounded-none bg-transparent shadow-none ring-offset-transparent dark:bg-transparent focus-visible:ring-0 focus-visible:ring-transparent', props.inputClass),
         ...$attrs,
       }"
       ref="inputRef"

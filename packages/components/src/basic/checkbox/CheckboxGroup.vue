@@ -158,7 +158,7 @@ function handleCustomOptionKeydown(option: TOption) {
         cn(
           'flex gap-2',
           option.description ? 'items-start' : 'items-center',
-          slots.option && 'outline-none focus-visible:ring-ring/50 focus-visible:ring-[3px] rounded-xl',
+          slots.option && 'outline-none focus-visible:ring-ring/50 focus-visible:ring-3 rounded-xl',
           props.optionClass,
         )
       "

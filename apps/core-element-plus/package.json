@@ -44,7 +44,6 @@
     "vconsole": "catalog:",
     "vee-validate": "catalog:",
     "vue": "catalog:",
-    "vue-echarts": "catalog:",
     "vue-router": "catalog:",
     "zod": "catalog:"
   },

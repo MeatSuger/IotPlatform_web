@@ -155,8 +155,12 @@ function switchToCard() {
   viewMode.value = 'card'
 }
 
-function onEdit(row: DeviceRow) {
+function onOpen(row: DeviceRow) {
   router.push({ name: 'DeviceControl', query: { deviceId: row.deviceId } })
+}
+
+function onEdit(row: DeviceRow) {
+  router.push({ name: 'EditDevice', query: { deviceId: row.deviceId } })
 }
 
 function onDel(row: DeviceRow) {
@@ -304,7 +308,7 @@ onActivated(() => {
           </template>
           <template #cell-deviceName="{ row }">
             <FaTooltip :delay="100" side="bottom" align="start">
-              <div class="min-w-0 cursor-pointer" @click="onEdit(row.original)">
+              <div class="min-w-0 cursor-pointer" @click="onOpen(row.original)">
                 <span class="text-primary leading-tight font-semibold underline decoration-1 underline-offset-2 block truncate hover:text-primary/80">{{ row.original.deviceName }}</span>
               </div>
               <template #content>
@@ -347,7 +351,7 @@ onActivated(() => {
             :key="device.id"
             class="!p-0! !gap-0! cursor-pointer transition-shadow overflow-hidden hover:shadow-md"
             content-class="!p-0!"
-            @click="onEdit(device)"
+            @click="onOpen(device)"
           >
             <div class="px-4 py-2.5 border-b flex gap-2 items-center">
               <FaTooltip :delay="100" side="bottom" align="start">

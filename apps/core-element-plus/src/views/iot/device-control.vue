@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import type { TableColumn } from '@fantastic-admin/components'
-import type { DeviceConfig, DeviceConfigPayload, DeviceDetail, SensorItem } from '@/api/modules/iot/control'
-import type { SensorConfig } from '@/api/modules/iot/sensor'
+import type { FormExpose, TableColumn } from '@fantastic-admin/components'
+import type { DeviceConfig, DeviceConfigPayload, DeviceDetail } from '@/api/modules/iot/control'
+import type { Sensor, SensorCreatePayload, SensorSpecs, SensorThresholds, SensorUpdatePayload } from '@/api/modules/iot/sensor'
 import type { ControllerItem, ControllerType } from '@/store/modules/controller'
+import { toTypedSchema } from '@vee-validate/zod'
+import * as z from 'zod'
 import { controlApi } from '@/api/modules/iot/control'
 import { deviceApi } from '@/api/modules/iot/device'
 import { sensorApi } from '@/api/modules/iot/sensor'
@@ -107,9 +109,13 @@ function backToList() {
   selectedDetail.value = null
 }
 
-// ==================== 传感器配置（预留接口）+ 数值展示 ====================
-// 配置从后端拉取存本地（值先空置），数值由设备详情合并填充
-const sensorConfigs = ref<SensorConfig[]>([])
+// ==================== 传感器定义（物模型）+ 数值展示 ====================
+// 定义从后端拉取存本地（值先空置），数值由设备详情匹配填充
+export interface DisplaySensor extends Sensor {
+  value: string
+}
+
+const sensorConfigs = ref<Sensor[]>([])
 const sensorViewMode = ref<'list' | 'grid'>('list')
 
 async function fetchSensorConfig(deviceId: string) {
@@ -119,22 +125,27 @@ async function fetchSensorConfig(deviceId: string) {
     sensorConfigs.value = Array.isArray(data) ? data : []
   }
   catch (e) {
-    // 预留接口暂不可用时置空，displaySensors 将回退展示设备详情 sensors
     console.warn('[DeviceControl] fetch sensor config failed, fallback to detail sensors:', e)
     sensorConfigs.value = []
   }
 }
 
-// 配置决定展示哪些传感器，数值从设备详情匹配填充（标识名/类型/名称）
-const displaySensors = computed<SensorItem[]>(() => {
+// 定义决定展示哪些传感器，数值按标识（id = 上报值 type）匹配填充
+const displaySensors = computed<DisplaySensor[]>(() => {
   const values = (selectedDetail.value?.sensors ?? []) as Array<Record<string, any>>
   if (!sensorConfigs.value.length) {
-    return values as unknown as SensorItem[]
+    return values.map(v => ({
+      id: String(v.type ?? v.name ?? ''),
+      name: String(v.name ?? ''),
+      type: String(v.type ?? ''),
+      value: v.value != null ? String(v.value) : '',
+    }))
   }
   return sensorConfigs.value.map((config) => {
     const hit = values.find(v =>
-      v.identifier === config.identifier
-      || v.type === config.identifier
+      v.type === config.id
+      || v.id === config.id
+      || v.name === config.id
       || v.name === config.name,
     )
     return {
@@ -144,12 +155,13 @@ const displaySensors = computed<SensorItem[]>(() => {
   })
 })
 
-const sensorColumns: TableColumn<SensorItem>[] = [
-  { accessorKey: 'name', header: '传感器名称', width: 'auto' },
-  { accessorKey: 'identifier', header: '标识名' },
-  { accessorKey: 'transferType', header: '传输类型', width: 110, align: 'center' },
+const sensorColumns: TableColumn<DisplaySensor>[] = [
+  { accessorKey: 'name', header: '传感器名称', width: 160 },
+  { accessorKey: 'id', header: '标识' },
+  { accessorKey: 'type', header: '类别', width: 110, align: 'center' },
   { accessorKey: 'dataType', header: '数据类型', width: 110, align: 'center' },
-  { accessorKey: 'value', header: '当前值', width: 140 },
+  { accessorKey: 'value', header: '当前值', width: 130 },
+  { accessorKey: 'enabled', header: '启用', width: 80, align: 'center' },
   {
     id: 'sensorMore',
     header: '操作',
@@ -166,77 +178,212 @@ function switchSensorToGrid() {
   sensorViewMode.value = 'grid'
 }
 
-// ==================== 新增 / 编辑 / 删除 传感器配置 ====================
+// ==================== 新增 / 编辑 / 删除 传感器定义（弹窗 FaForm） ====================
+const sensorTypeOptions = [
+  { label: '温度 (temperature)', value: 'temperature' },
+  { label: '湿度 (humidity)', value: 'humidity' },
+  { label: '光照 (light)', value: 'light' },
+  { label: '开关 (switch)', value: 'switch' },
+  { label: '自定义 (custom)', value: 'custom' },
+]
+
+const sensorDataTypeOptions = [
+  { label: '浮点 (float)', value: 'float' },
+  { label: '整数 (int)', value: 'int' },
+  { label: '布尔 (bool)', value: 'bool' },
+  { label: '文本 (text)', value: 'text' },
+  { label: '枚举 (enum)', value: 'enum' },
+]
+
 const showSensorDialog = ref(false)
 const sensorDialogMode = ref<'add' | 'edit'>('add')
 const sensorSaving = ref(false)
-const editingSensorIdentifier = ref('')
-const sensorForm = reactive({
+const editingSensorId = ref('')
+
+interface SensorFormModel {
+  id: string
+  name: string
+  type: string
+  dataType: string
+  unit: string
+  reportInterval: string
+  enabled: boolean
+  specs: { min: string, max: string, step: string }
+  thresholds: { min: string, max: string, alarm: boolean }
+  attrsRows: { key: string, value: string }[]
+}
+
+const sensorFormRef = useTemplateRef<FormExpose>('sensorFormRef')
+
+const sensorFormModel = ref<SensorFormModel>({
+  id: '',
   name: '',
-  identifier: '',
-  transferType: '只上报',
-  dataType: '浮点型',
+  type: 'temperature',
+  dataType: 'float',
   unit: '',
+  reportInterval: '60',
+  enabled: true,
+  specs: { min: '', max: '', step: '' },
+  thresholds: { min: '', max: '', alarm: false },
+  attrsRows: [],
 })
 
-const sensorTypeOptions = [
-  { label: '浮点型', value: '浮点型' },
-  { label: '整数型', value: '整数型' },
-  { label: '字符型', value: '字符型' },
-  { label: '布尔型', value: '布尔型' },
-]
+const sensorValidationSchema = toTypedSchema(z.object({
+  id: z.string().regex(/^[a-z][a-z0-9_]{0,49}$/, '小写字母开头，仅含小写字母/数字/下划线，≤50'),
+  name: z.string().min(1, '请输入名称').max(100, '名称最多 100 字符'),
+  type: z.string().min(1, '请选择类别'),
+  dataType: z.string().min(1, '请选择数据类型'),
+  unit: z.string().max(32, '单位最多 32 字符'),
+}))
 
-const transferTypeOptions = [
-  { label: '只上报', value: '只上报' },
-  { label: '上报和下发', value: '上报和下发' },
-]
+function toNumber(value: string): number | undefined {
+  const trimmed = String(value ?? '').trim()
+  if (trimmed === '') {
+    return undefined
+  }
+  const num = Number(trimmed)
+  return Number.isNaN(num) ? undefined : num
+}
+
+function resetSensorFormModel() {
+  sensorFormModel.value = {
+    id: '',
+    name: '',
+    type: 'temperature',
+    dataType: 'float',
+    unit: '',
+    reportInterval: '60',
+    enabled: true,
+    specs: { min: '', max: '', step: '' },
+    thresholds: { min: '', max: '', alarm: false },
+    attrsRows: [],
+  }
+}
 
 function openAddSensorDialog() {
   sensorDialogMode.value = 'add'
-  editingSensorIdentifier.value = ''
-  sensorForm.name = ''
-  sensorForm.identifier = ''
-  sensorForm.transferType = '只上报'
-  sensorForm.dataType = '浮点型'
-  sensorForm.unit = ''
+  editingSensorId.value = ''
+  resetSensorFormModel()
   showSensorDialog.value = true
 }
 
-function openEditSensorDialog(sensor: SensorItem) {
+function openEditSensorDialog(sensor: DisplaySensor) {
   sensorDialogMode.value = 'edit'
-  editingSensorIdentifier.value = sensor.identifier
-  sensorForm.name = sensor.name
-  sensorForm.identifier = sensor.identifier
-  sensorForm.transferType = sensor.transferType || '只上报'
-  sensorForm.dataType = sensor.dataType || '浮点型'
-  sensorForm.unit = sensor.unit ?? ''
+  editingSensorId.value = sensor.id
+  const specs = sensor.specs ?? {}
+  const thresholds = sensor.thresholds ?? {}
+  const attrs = sensor.attrs ?? {}
+  sensorFormModel.value = {
+    id: sensor.id,
+    name: sensor.name,
+    type: sensor.type || 'temperature',
+    dataType: sensor.dataType ?? 'float',
+    unit: sensor.unit ?? '',
+    reportInterval: sensor.reportInterval != null ? String(sensor.reportInterval) : '60',
+    enabled: sensor.enabled ?? true,
+    specs: {
+      min: specs.min != null ? String(specs.min) : '',
+      max: specs.max != null ? String(specs.max) : '',
+      step: specs.step != null ? String(specs.step) : '',
+    },
+    thresholds: {
+      min: thresholds.min != null ? String(thresholds.min) : '',
+      max: thresholds.max != null ? String(thresholds.max) : '',
+      alarm: thresholds.alarm ?? false,
+    },
+    attrsRows: Object.entries(attrs).map(([key, value]) => ({ key, value: String(value) })),
+  }
   showSensorDialog.value = true
 }
 
-async function saveSensor() {
+function addAttrRow() {
+  sensorFormModel.value.attrsRows.push({ key: '', value: '' })
+}
+
+function removeAttrRow(index: number) {
+  sensorFormModel.value.attrsRows.splice(index, 1)
+}
+
+// 组装提交载荷：specs/thresholds/attrs 为空子键时省略
+function buildSensorPayload(): SensorUpdatePayload {
+  const m = sensorFormModel.value
+  const payload: SensorUpdatePayload = {
+    name: m.name.trim(),
+    type: m.type,
+    dataType: m.dataType as Sensor['dataType'],
+    unit: m.unit.trim(),
+    reportInterval: toNumber(m.reportInterval) ?? 0,
+    enabled: m.enabled,
+  }
+
+  const specs: SensorSpecs = {}
+  const min = toNumber(m.specs.min)
+  const max = toNumber(m.specs.max)
+  const step = toNumber(m.specs.step)
+  if (min != null) {
+    specs.min = min
+  }
+  if (max != null) {
+    specs.max = max
+  }
+  if (step != null) {
+    specs.step = step
+  }
+  if (Object.keys(specs).length) {
+    payload.specs = specs
+  }
+
+  const thresholds: SensorThresholds = {}
+  const tMin = toNumber(m.thresholds.min)
+  const tMax = toNumber(m.thresholds.max)
+  if (tMin != null) {
+    thresholds.min = tMin
+  }
+  if (tMax != null) {
+    thresholds.max = tMax
+  }
+  if (m.thresholds.alarm) {
+    thresholds.alarm = true
+  }
+  if (Object.keys(thresholds).length) {
+    payload.thresholds = thresholds
+  }
+
+  const attrs: Record<string, string> = {}
+  m.attrsRows.forEach((row) => {
+    const key = row.key.trim()
+    if (key) {
+      attrs[key] = row.value
+    }
+  })
+  if (Object.keys(attrs).length) {
+    payload.attrs = attrs
+  }
+
+  return payload
+}
+
+async function onSensorSubmit() {
   const deviceId = selectedDetail.value?.deviceId
   if (!deviceId) {
     return
   }
-  if (!sensorForm.name.trim() || !sensorForm.identifier.trim()) {
-    useFaToast().warning('请填写名称和标识名')
-    return
-  }
-  const payload: SensorConfig = {
-    name: sensorForm.name.trim(),
-    identifier: sensorForm.identifier.trim(),
-    transferType: sensorForm.transferType,
-    dataType: sensorForm.dataType,
-    unit: sensorForm.unit.trim() || undefined,
-  }
+  const payload = buildSensorPayload()
   sensorSaving.value = true
   try {
     if (sensorDialogMode.value === 'add') {
-      await sensorApi.create(deviceId, payload)
+      const { name: nameVal, type: typeVal, ...restPayload } = payload
+      const createPayload: SensorCreatePayload = {
+        ...restPayload,
+        id: sensorFormModel.value.id.trim(),
+        name: nameVal ?? '',
+        type: typeVal ?? '',
+      }
+      await sensorApi.create(deviceId, createPayload)
       useFaToast().success('传感器添加成功')
     }
     else {
-      await sensorApi.update(deviceId, editingSensorIdentifier.value, payload)
+      await sensorApi.update(deviceId, editingSensorId.value, payload)
       useFaToast().success('传感器更新成功')
     }
     showSensorDialog.value = false
@@ -250,17 +397,21 @@ async function saveSensor() {
   }
 }
 
-function removeSensor(sensor: SensorItem) {
+function confirmSensorDialog() {
+  sensorFormRef.value?.submit()
+}
+
+function removeSensor(sensor: DisplaySensor) {
   const deviceId = selectedDetail.value?.deviceId
   if (!deviceId) {
     return
   }
   useFaModal().confirm({
     title: '确认信息',
-    content: `确认删除传感器「${sensor.name || sensor.identifier}」吗？`,
+    content: `确认删除传感器「${sensor.name || sensor.id}」吗？`,
     onConfirm: async () => {
       try {
-        await sensorApi.remove(deviceId, sensor.identifier)
+        await sensorApi.remove(deviceId, sensor.id)
         useFaToast().success('传感器删除成功')
         await fetchSensorConfig(deviceId)
       }
@@ -550,33 +701,39 @@ async function dispatchDeviceConfig() {
     return
   }
   const deviceId = selectedDetail.value.deviceId
-  if (selectedDetail.value.status !== 'ONLINE') {
-    useFaToast().warning('设备离线，无法下发')
-    return
-  }
-  if (!wsConnected.value) {
-    useFaToast().warning('WebSocket 未连接，无法下发')
-    return
-  }
-  const controllers = currentControllers.value
-  if (!controllers.length) {
-    useFaToast().warning('暂无控制器，请先添加控制器')
-    return
-  }
 
   dispatchLoading.value = true
   try {
-    controllers.forEach((ctrl) => {
-      wsSend({
-        deviceId,
-        type: 'control',
-        payload: {
-          GPIO: ctrl.identifier,
-          action: (ctrl.type === 'switch' ? (ctrl.value ? 'on' : 'off') : 'set') as 'toggle' | 'on' | 'off',
-        },
-      })
-    })
-    useFaToast().success('下发成功')
+    // 1. 下发传感器定义配置（编译进 config 并版本化下发，HTTP；离线也入队待设备拉取）
+    const applyRes: any = await sensorApi.apply(deviceId)
+    const applyData = applyRes?.data?.data ?? applyRes?.data
+    if (applyData?.version != null) {
+      useFaToast().success(`传感器配置已下发（version ${applyData.version}，共 ${applyData.count ?? 0} 项）`)
+    }
+    else {
+      useFaToast().success('传感器配置已下发')
+    }
+
+    // 2. 控制器指令走 WebSocket（未连接或暂无控制器时跳过，不阻塞配置下发）
+    const controllers = currentControllers.value
+    if (controllers.length) {
+      if (wsConnected.value) {
+        controllers.forEach((ctrl) => {
+          wsSend({
+            deviceId,
+            type: 'control',
+            payload: {
+              GPIO: ctrl.identifier,
+              action: (ctrl.type === 'switch' ? (ctrl.value ? 'on' : 'off') : 'set') as 'toggle' | 'on' | 'off',
+            },
+          })
+        })
+        useFaToast().success('控制器指令已下发')
+      }
+      else {
+        useFaToast().warning('WebSocket 未连接，控制器指令未下发')
+      }
+    }
   }
   catch {
     useFaToast().error('下发失败')
@@ -831,7 +988,7 @@ onBeforeUnmount(() => {
               <FaTable
                 v-if="displaySensors.length"
                 table-root-class="rounded-lg overflow-hidden"
-                row-key="identifier"
+                row-key="id"
                 stripe
                 border
                 :columns="sensorColumns"
@@ -847,18 +1004,23 @@ onBeforeUnmount(() => {
                     </template>
                   </FaTooltip>
                 </template>
-                <template #cell-transferType="{ value }">
+                <template #cell-type="{ value }">
                   <FaTag variant="secondary">
-                    {{ value }}
+                    {{ value || '-' }}
                   </FaTag>
                 </template>
                 <template #cell-dataType="{ value }">
                   <FaTag variant="secondary">
-                    {{ value }}
+                    {{ value || '-' }}
                   </FaTag>
                 </template>
                 <template #cell-value="{ row }">
                   <span class="font-semibold">{{ row.original.value || '-' }}{{ row.original.unit ?? '' }}</span>
+                </template>
+                <template #cell-enabled="{ value }">
+                  <FaTag :variant="value === false ? 'secondary' : 'default'">
+                    {{ value === false ? '停用' : '启用' }}
+                  </FaTag>
                 </template>
                 <template #cell-sensorMore="{ row }">
                   <FaDropdown
@@ -882,7 +1044,7 @@ onBeforeUnmount(() => {
             <template v-else>
               <div v-if="displaySensors.length" class="gap-3 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3">
                 <FaCard
-                  v-for="sensor in displaySensors" :key="sensor.identifier"
+                  v-for="sensor in displaySensors" :key="sensor.id"
                   class="!p-0! !gap-0! overflow-hidden" content-class="!p-0!"
                 >
                   <div class="px-4 py-2.5 border-b flex gap-2 items-center">
@@ -890,8 +1052,11 @@ onBeforeUnmount(() => {
                       {{ sensor.name }}
                     </span>
                     <div class="ml-auto flex shrink-0 gap-1.5 items-center">
+                      <FaTag :variant="sensor.enabled === false ? 'secondary' : 'default'">
+                        {{ sensor.enabled === false ? '停用' : '启用' }}
+                      </FaTag>
                       <FaTag variant="secondary">
-                        {{ sensor.transferType }}
+                        {{ sensor.type || '-' }}
                       </FaTag>
                       <FaDropdown
                         :items="[
@@ -909,12 +1074,16 @@ onBeforeUnmount(() => {
                   </div>
                   <div class="text-sm px-4 py-3 flex flex-col gap-2">
                     <div class="flex gap-3 items-center justify-between">
-                      <span class="text-gray-500 shrink-0">标识名</span>
-                      <span class="font-medium min-w-0 truncate">{{ sensor.identifier }}</span>
+                      <span class="text-gray-500 shrink-0">标识</span>
+                      <span class="font-medium min-w-0 truncate">{{ sensor.id }}</span>
                     </div>
                     <div class="flex gap-3 items-center justify-between">
                       <span class="text-gray-500 shrink-0">数据类型</span>
                       <span class="font-medium min-w-0 truncate">{{ sensor.dataType || '-' }}</span>
+                    </div>
+                    <div v-if="sensor.reportInterval != null" class="flex gap-3 items-center justify-between">
+                      <span class="text-gray-500 shrink-0">上报间隔</span>
+                      <span class="font-medium min-w-0 truncate">{{ sensor.reportInterval }}s</span>
                     </div>
                     <div class="flex gap-3 items-center justify-between">
                       <span class="text-gray-500 shrink-0">当前值</span>
@@ -992,7 +1161,7 @@ onBeforeUnmount(() => {
       <div v-if="configVersion > 0" class="text-xs text-gray-400 mb-2">
         当前版本 v{{ configVersion }} · 状态：{{ configStatus || '未确认' }}
       </div>
-      <div class="py-2 pr-1 flex flex-col gap-4 max-h-70vh overflow-auto">
+      <div class="py-2 pr-1 flex flex-col gap-4 max-h-70vh min-w-0 overflow-auto overflow-x-hidden">
         <div class="flex flex-col gap-2">
           <div class="text-sm text-muted-foreground font-semibold">
             网络 (network)
@@ -1000,19 +1169,19 @@ onBeforeUnmount(() => {
           <div class="gap-3 grid grid-cols-1 sm:grid-cols-2">
             <div class="flex flex-col gap-1">
               <label class="text-sm font-medium">WiFi SSID</label>
-              <FaInput v-model="configForm.wifiSsid" placeholder="如：MyWiFi" />
+              <FaInput v-model="configForm.wifiSsid" placeholder="如：MyWiFi" class="w-full" />
             </div>
             <div class="flex flex-col gap-1">
               <label class="text-sm font-medium">WiFi 密码</label>
-              <FaInput v-model="configForm.wifiPassword" placeholder="WiFi 密码" type="password" />
+              <FaInput v-model="configForm.wifiPassword" placeholder="WiFi 密码" type="password" class="w-full" />
             </div>
             <div class="flex flex-col gap-1">
               <label class="text-sm font-medium">MQTT Host</label>
-              <FaInput v-model="configForm.mqttHost" placeholder="如：broker.example.com" />
+              <FaInput v-model="configForm.mqttHost" placeholder="如：broker.example.com" class="w-full" />
             </div>
             <div class="flex flex-col gap-1">
               <label class="text-sm font-medium">MQTT Port</label>
-              <FaInput v-model="configForm.mqttPort" placeholder="1883" />
+              <FaInput v-model="configForm.mqttPort" placeholder="1883" class="w-full" />
             </div>
           </div>
           <FaCheckbox v-model="configForm.mqttTls">
@@ -1027,15 +1196,15 @@ onBeforeUnmount(() => {
           <div class="gap-3 grid grid-cols-1 sm:grid-cols-3">
             <div class="flex flex-col gap-1">
               <label class="text-sm font-medium">上报间隔 (s)</label>
-              <FaInput v-model="configForm.reportInterval" placeholder="60" />
+              <FaInput v-model="configForm.reportInterval" placeholder="60" class="w-full" />
             </div>
             <div class="flex flex-col gap-1">
               <label class="text-sm font-medium">温度下限 (°C)</label>
-              <FaInput v-model="configForm.tempMin" placeholder="0" />
+              <FaInput v-model="configForm.tempMin" placeholder="0" class="w-full" />
             </div>
             <div class="flex flex-col gap-1">
               <label class="text-sm font-medium">温度上限 (°C)</label>
-              <FaInput v-model="configForm.tempMax" placeholder="100" />
+              <FaInput v-model="configForm.tempMax" placeholder="100" class="w-full" />
             </div>
           </div>
         </div>
@@ -1046,7 +1215,7 @@ onBeforeUnmount(() => {
           </div>
           <div class="flex flex-col gap-1 w-full sm:w-1/2">
             <label class="text-sm font-medium">模式</label>
-            <FaSelect v-model="configForm.actuatorMode" :options="actuatorModeOptions" />
+            <FaSelect v-model="configForm.actuatorMode" :options="actuatorModeOptions" class="w-full" />
           </div>
         </div>
 
@@ -1057,23 +1226,23 @@ onBeforeUnmount(() => {
           <div class="gap-3 grid grid-cols-1 sm:grid-cols-2">
             <div class="flex flex-col gap-1">
               <label class="text-sm font-medium">SMTP Host</label>
-              <FaInput v-model="configForm.smtpHost" placeholder="如：smtp.example.com" />
+              <FaInput v-model="configForm.smtpHost" placeholder="如：smtp.example.com" class="w-full" />
             </div>
             <div class="flex flex-col gap-1">
               <label class="text-sm font-medium">SMTP Port</label>
-              <FaInput v-model="configForm.smtpPort" placeholder="465" />
+              <FaInput v-model="configForm.smtpPort" placeholder="465" class="w-full" />
             </div>
             <div class="flex flex-col gap-1">
               <label class="text-sm font-medium">SMTP 用户名</label>
-              <FaInput v-model="configForm.smtpUsername" placeholder="邮箱账号" />
+              <FaInput v-model="configForm.smtpUsername" placeholder="邮箱账号" class="w-full" />
             </div>
             <div class="flex flex-col gap-1">
               <label class="text-sm font-medium">SMTP 密码</label>
-              <FaInput v-model="configForm.smtpPassword" type="password" placeholder="授权码" />
+              <FaInput v-model="configForm.smtpPassword" type="password" placeholder="授权码" class="w-full" />
             </div>
             <div class="flex flex-col gap-1">
               <label class="text-sm font-medium">抓拍间隔 (s)</label>
-              <FaInput v-model="configForm.snapshotInterval" placeholder="30" />
+              <FaInput v-model="configForm.snapshotInterval" placeholder="30" class="w-full" />
             </div>
           </div>
           <FaCheckbox v-model="configForm.smtpSsl">
@@ -1086,31 +1255,85 @@ onBeforeUnmount(() => {
     <!-- 新增 / 编辑传感器弹窗 -->
     <FaModal
       v-model="showSensorDialog" :title="sensorDialogMode === 'add' ? '添加传感器' : '编辑传感器'"
-      show-cancel-button :confirm-button-loading="sensorSaving" @confirm="saveSensor"
+      show-cancel-button :confirm-button-loading="sensorSaving" @confirm="confirmSensorDialog"
       @cancel="showSensorDialog = false"
     >
-      <div class="py-2 flex flex-col gap-4">
-        <div class="flex flex-col gap-1">
-          <label class="text-sm font-medium">名称</label>
-          <FaInput v-model="sensorForm.name" placeholder="如：温度、湿度" />
+      <FaForm
+        v-if="showSensorDialog"
+        ref="sensorFormRef"
+        :model="sensorFormModel"
+        :validation-schema="sensorValidationSchema"
+        class="gap-3 grid grid-cols-2 min-w-0"
+        @submit="onSensorSubmit"
+      >
+        <FaFormItem name="id" label="标识 (id)" class="col-span-1" required>
+          <FaInput placeholder="如 temperature" :disabled="sensorDialogMode === 'edit'" class="w-full" />
+        </FaFormItem>
+        <FaFormItem name="name" label="名称" class="col-span-1" required>
+          <FaInput placeholder="如：温度" class="w-full" />
+        </FaFormItem>
+        <FaFormItem name="type" label="类别" class="col-span-1" required>
+          <FaSelect :options="sensorTypeOptions" class="w-full" />
+        </FaFormItem>
+        <FaFormItem name="dataType" label="数据类型" class="col-span-1" required>
+          <FaSelect :options="sensorDataTypeOptions" class="w-full" />
+        </FaFormItem>
+        <FaFormItem name="unit" label="单位" class="col-span-1">
+          <FaInput placeholder="如：°C、%RH" class="w-full" />
+        </FaFormItem>
+        <div class="flex flex-col gap-1 col-span-1">
+          <label class="text-sm font-medium">上报周期 (s)</label>
+          <FaInput v-model="sensorFormModel.reportInterval" type="number" placeholder="0 = 继承设备全局" class="w-full" />
         </div>
-        <div class="flex flex-col gap-1">
-          <label class="text-sm font-medium">标识名 (identifier)</label>
-          <FaInput v-model="sensorForm.identifier" placeholder="如：temperature" :disabled="sensorDialogMode === 'edit'" />
+        <div class="flex gap-3 col-span-2 items-center">
+          <label class="text-sm font-medium">启用</label>
+          <FaSwitch v-model="sensorFormModel.enabled" />
         </div>
-        <div class="flex flex-col gap-1">
-          <label class="text-sm font-medium">传输类型</label>
-          <FaSelect v-model="sensorForm.transferType" :options="transferTypeOptions" />
+
+        <!-- 量程 specs -->
+        <div class="flex flex-col gap-1 col-span-2">
+          <span class="text-sm font-medium">量程 (specs)</span>
+          <div class="gap-3 grid grid-cols-3">
+            <FaInput v-model="sensorFormModel.specs.min" type="number" placeholder="min" class="w-full" />
+            <FaInput v-model="sensorFormModel.specs.max" type="number" placeholder="max" class="w-full" />
+            <FaInput v-model="sensorFormModel.specs.step" type="number" placeholder="step" class="w-full" />
+          </div>
         </div>
-        <div class="flex flex-col gap-1">
-          <label class="text-sm font-medium">数据类型</label>
-          <FaSelect v-model="sensorForm.dataType" :options="sensorTypeOptions" />
+
+        <!-- 阈值 thresholds -->
+        <div class="flex flex-col gap-2 col-span-2">
+          <span class="text-sm font-medium">告警阈值 (thresholds)</span>
+          <div class="gap-3 grid grid-cols-2">
+            <FaInput v-model="sensorFormModel.thresholds.min" type="number" placeholder="min" class="w-full" />
+            <FaInput v-model="sensorFormModel.thresholds.max" type="number" placeholder="max" class="w-full" />
+          </div>
+          <div class="flex gap-3 items-center">
+            <label class="text-sm font-medium">告警</label>
+            <FaSwitch v-model="sensorFormModel.thresholds.alarm" />
+          </div>
         </div>
-        <div class="flex flex-col gap-1">
-          <label class="text-sm font-medium">单位（可选）</label>
-          <FaInput v-model="sensorForm.unit" placeholder="如：°C、%RH" />
+
+        <!-- 扩展属性 attrs（键值对动态行） -->
+        <div class="flex flex-col gap-2 col-span-2">
+          <div class="flex items-center justify-between">
+            <span class="text-sm font-medium">扩展属性 (attrs)</span>
+            <FaButton variant="outline" size="sm" type="button" @click="addAttrRow">
+              <FaIcon name="i-material-symbols:add" class="mr-1 size-4" />
+              添加属性
+            </FaButton>
+          </div>
+          <div v-if="sensorFormModel.attrsRows.length" class="flex flex-col gap-2">
+            <div v-for="(row, index) in sensorFormModel.attrsRows" :key="index" class="flex gap-2 items-center">
+              <FaInput v-model="row.key" placeholder="key" class="w-40" />
+              <FaInput v-model="row.value" placeholder="value" class="flex-1" />
+              <FaButton variant="ghost" size="icon-sm" type="button" class="text-gray-400 hover:text-red-500" @click="removeAttrRow(index)">
+                <FaIcon name="i-material-symbols:close" class="size-4" />
+              </FaButton>
+            </div>
+          </div>
+          <span v-else class="text-xs text-gray-400">暂无扩展属性</span>
         </div>
-      </div>
+      </FaForm>
     </FaModal>
 
     <!-- 添加控制器弹窗 -->
@@ -1121,16 +1344,17 @@ onBeforeUnmount(() => {
       <div class="py-2 flex flex-col gap-4">
         <div class="flex flex-col gap-1">
           <label class="text-sm font-medium">名称</label>
-          <FaInput v-model="controllerForm.name" placeholder="如：电源开关、运行模式" />
+          <FaInput v-model="controllerForm.name" placeholder="如：电源开关、运行模式" class="w-full" />
         </div>
         <div class="flex flex-col gap-1">
           <label class="text-sm font-medium">标识名 (GPIO)</label>
-          <FaInput v-model="controllerForm.identifier" placeholder="如：1、2、3" />
+          <FaInput v-model="controllerForm.identifier" placeholder="如：1、2、3" class="w-full" />
         </div>
         <div class="flex flex-col gap-1">
           <label class="text-sm font-medium">类型</label>
           <FaSelect
-            v-model="controllerForm.type" :options="[
+            v-model="controllerForm.type"
+            class="w-full" :options="[
               { label: '开关', value: 'switch' },
               { label: '枚举', value: 'enum' },
             ]"
@@ -1138,7 +1362,7 @@ onBeforeUnmount(() => {
         </div>
         <div v-if="controllerForm.type === 'enum'" class="flex flex-col gap-1">
           <label class="text-sm font-medium">选项（逗号分隔）</label>
-          <FaInput v-model="controllerForm.options" placeholder="如：auto,cool,heat,fan" />
+          <FaInput v-model="controllerForm.options" placeholder="如：auto,cool,heat,fan" class="w-full" />
         </div>
       </div>
     </FaModal>

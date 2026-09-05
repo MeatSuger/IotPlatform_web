@@ -2,22 +2,21 @@ import type { ProcessedRequest } from 'vite-plugin-fake-server'
 import { faker } from '@faker-js/faker'
 import { defineFakeRoute } from 'vite-plugin-fake-server'
 
+// 上报值模板：type 为传感器定义标识（id），与 sensor.fake.ts 对齐
 const sensorsTemplates = [
-  { name: '温度', identifier: 'temperature', transferType: '只上报', dataType: '浮点型', unit: '°C', min: 18, max: 35 },
-  { name: '湿度', identifier: 'humidity', transferType: '只上报', dataType: '浮点型', unit: '%RH', min: 30, max: 80 },
-  { name: '光照', identifier: 'illuminance', transferType: '只上报', dataType: '浮点型', unit: 'lux', min: 100, max: 5000 },
-  { name: '气压', identifier: 'pressure', transferType: '只上报', dataType: '浮点型', unit: 'hPa', min: 990, max: 1030 },
+  { name: 'temperature', type: 'temperature', unit: '°C', min: 18, max: 35 },
+  { name: 'humidity', type: 'humidity', unit: '%RH', min: 30, max: 80 },
+  { name: 'illuminance', type: 'illuminance', unit: 'lux', min: 100, max: 5000 },
+  { name: 'pressure', type: 'pressure', unit: 'hPa', min: 990, max: 1030 },
 ]
 
 function generateSensors() {
   const count = faker.number.int({ min: 1, max: 3 })
   return faker.helpers.arrayElements(sensorsTemplates, count).map(t => ({
     name: t.name,
-    identifier: t.identifier,
-    transferType: t.transferType,
-    dataType: t.dataType,
-    value: faker.number.float({ min: t.min, max: t.max, fractionDigits: 1 }).toString(),
-    unit: t.unit,
+    type: t.type,
+    value: faker.number.float({ min: t.min, max: t.max, fractionDigits: 1 }),
+    timestamp: faker.date.recent({ days: 1 }).toISOString(),
   }))
 }
 

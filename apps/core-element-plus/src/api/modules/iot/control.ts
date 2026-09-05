@@ -1,13 +1,12 @@
 import api from '../../index'
 
-// ==================== 传感器 ====================
+// ==================== 传感器上报值（设备详情 sensors，API.md 4.3 SensorData） ====================
 export interface SensorItem {
   name: string
-  identifier: string
-  transferType: string
-  dataType: string
-  value: string
-  unit?: string
+  // 上报的传感器标识（对应 Sensor 定义的 id / ApiTag）
+  type: string
+  value: number | string | boolean
+  timestamp?: string
 }
 
 // ==================== 设备详情（真实 API: GET /api/devices/{deviceId}） ====================

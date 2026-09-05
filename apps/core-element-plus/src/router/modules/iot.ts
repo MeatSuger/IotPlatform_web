@@ -66,6 +66,16 @@ const IotRoutes: RouteRecordMainRaw = {
           },
         },
         {
+          path: 'edit',
+          name: 'EditDevice',
+          component: () => import('@/views/iot/device-edit.vue'),
+          meta: {
+            title: '编辑设备',
+            menu: false,
+            activeMenu: '/devices/list',
+          },
+        },
+        {
           path: 'control',
           name: 'DeviceControl',
           component: () => import('@/views/iot/device-control.vue'),

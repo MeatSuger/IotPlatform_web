@@ -55,7 +55,6 @@ catalog:
   cz-git: ^1.14.0
   dayjs: ^1.11.23
   defu: ^6.1.7
-  echarts: ^6.1.0
   eruda: ^3.4.3
   es-toolkit: ^1.52.0
   eslint: ^10.9.1

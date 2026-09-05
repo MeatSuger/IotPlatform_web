@@ -24,7 +24,7 @@
     "class-variance-authority": "catalog:",
     "clsx": "catalog:",
     "dayjs": "catalog:",
-    "echarts": "catalog:",
+    "echarts": "^6.1.0",
     "element-plus": "catalog:element-plus",
     "eruda": "catalog:",
     "es-toolkit": "catalog:",

@@ -58,21 +58,21 @@ function onSubmit(values: EditPasswordModel) {
       <FaFormItem name="password">
         <FaInput type="password" placeholder="原密码" class="w-full">
           <template #start>
-            <FaIcon name="i-lucide:lock" />
+            <FaIcon name="i-ri:lock-line" />
           </template>
         </FaInput>
       </FaFormItem>
       <FaFormItem name="newPassword">
         <FaInput type="password" placeholder="新密码" class="w-full">
           <template #start>
-            <FaIcon name="i-lucide:lock" />
+            <FaIcon name="i-ri:lock-line" />
           </template>
         </FaInput>
       </FaFormItem>
       <FaFormItem name="checkPassword">
         <FaInput type="password" placeholder="确认密码" class="w-full">
           <template #start>
-            <FaIcon name="i-lucide:lock" />
+            <FaIcon name="i-ri:lock-line" />
           </template>
         </FaInput>
       </FaFormItem>

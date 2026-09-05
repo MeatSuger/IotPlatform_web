@@ -67,7 +67,7 @@ function handleSendCaptcha() {
       <FaFormItem name="account">
         <FaInput type="text" placeholder="用户名" class="w-full">
           <template #start>
-            <FaIcon name="i-lucide:user" />
+            <FaIcon name="i-ri:user-line" />
           </template>
         </FaInput>
       </FaFormItem>
@@ -87,7 +87,7 @@ function handleSendCaptcha() {
       <FaFormItem name="newPassword">
         <FaInput type="password" placeholder="新密码" class="w-full">
           <template #start>
-            <FaIcon name="i-lucide:lock" />
+            <FaIcon name="i-ri:lock-line" />
           </template>
         </FaInput>
       </FaFormItem>

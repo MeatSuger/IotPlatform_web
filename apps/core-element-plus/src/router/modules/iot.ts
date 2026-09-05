@@ -7,7 +7,7 @@ function Layout() {
 const IotRoutes: RouteRecordMainRaw = {
   meta: {
     title: 'IoT 管理',
-    icon: 'i-ant-design:cloud-server-outlined',
+    icon: 'i-ri:cloud-line',
   },
   children: [
     // 仪表盘
@@ -17,7 +17,7 @@ const IotRoutes: RouteRecordMainRaw = {
       name: 'Dashboard',
       meta: {
         title: '仪表盘',
-        icon: 'i-ant-design:dashboard-twotone',
+        icon: 'i-ri:dashboard-line',
       },
       children: [
         {
@@ -26,7 +26,7 @@ const IotRoutes: RouteRecordMainRaw = {
           component: () => import('@/views/iot/dashboard.vue'),
           meta: {
             title: '仪表盘',
-            icon: 'i-ant-design:dashboard-twotone',
+            icon: 'i-ri:dashboard-line',
             affix: true,
             keepAlive: true,
             menu: false,
@@ -43,7 +43,7 @@ const IotRoutes: RouteRecordMainRaw = {
       redirect: '/devices/list',
       meta: {
         title: '设备管理',
-        icon: 'i-ant-design:setting-twotone',
+        icon: 'i-ri:settings-line',
       },
       children: [
         {
@@ -52,7 +52,7 @@ const IotRoutes: RouteRecordMainRaw = {
           component: () => import('@/views/iot/device-list.vue'),
           meta: {
             title: '设备信息',
-            icon: 'i-ant-design:unordered-list-outlined',
+            icon: 'i-ri:list-unordered',
             keepAlive: true,
           },
         },
@@ -62,17 +62,18 @@ const IotRoutes: RouteRecordMainRaw = {
           component: () => import('@/views/iot/device-add.vue'),
           meta: {
             title: '添加设备',
-            icon: 'i-ant-design:plus-circle-outlined',
+            icon: 'i-ri:add-circle-line',
           },
         },
         {
-          path: 'edit',
-          name: 'EditDevice',
-          component: () => import('@/views/iot/device-edit.vue'),
+          path: 'log',
+          name: 'LogDevice',
+          component: () => import('@/views/iot/device-log.vue'),
           meta: {
-            title: '编辑设备',
+            title: '设备日志',
             menu: false,
             activeMenu: '/devices/list',
+            noKeepAlive: 'DeviceList',
           },
         },
         {
@@ -81,7 +82,7 @@ const IotRoutes: RouteRecordMainRaw = {
           component: () => import('@/views/iot/device-control.vue'),
           meta: {
             title: '设备控制',
-            icon: 'i-ant-design:control-outlined',
+            icon: 'i-ri:gamepad-line',
             keepAlive: true,
           },
         },
@@ -94,7 +95,7 @@ const IotRoutes: RouteRecordMainRaw = {
       name: 'Monitor',
       meta: {
         title: '数据监控',
-        icon: 'i-ant-design:line-chart-outlined',
+        icon: 'i-ri:line-chart-line',
       },
       children: [
         {

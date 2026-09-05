@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { TableColumn } from '@fantastic-admin/components'
 import { deviceApi } from '@/api/modules/iot/device'
+import DeviceEditDialog from './components/DeviceEditDialog.vue'
 
 defineOptions({
   name: 'DeviceList',
@@ -159,8 +160,17 @@ function onOpen(row: DeviceRow) {
   router.push({ name: 'DeviceControl', query: { deviceId: row.deviceId } })
 }
 
+// 编辑设备弹窗（基础资料，无高级配置）
+const showDeviceEditDialog = ref(false)
+const editingDevice = ref<DeviceRow | null>(null)
+
 function onEdit(row: DeviceRow) {
-  router.push({ name: 'EditDevice', query: { deviceId: row.deviceId } })
+  editingDevice.value = row
+  showDeviceEditDialog.value = true
+}
+
+function onDeviceSaved() {
+  getDataList()
 }
 
 function onDel(row: DeviceRow) {
@@ -242,7 +252,7 @@ onActivated(() => {
               </FaButton>
               <FaButton variant="ghost" @click="toggle">
                 {{ fold ? '展开' : '收起' }}
-                <FaIcon :name="fold ? 'i-ep:caret-bottom' : 'i-ep:caret-top'" />
+                <FaIcon :name="fold ? 'i-ri:arrow-down-s-line' : 'i-ri:arrow-up-s-line'" />
               </FaButton>
             </div>
           </div>
@@ -265,7 +275,7 @@ onActivated(() => {
           >
             <FaButton variant="outline" :disabled="!batch.selectionDataList.length">
               批量操作
-              <FaIcon name="i-ep:arrow-down" />
+              <FaIcon name="i-ri:arrow-down-line" />
             </FaButton>
           </FaDropdown>
           <FaButton variant="outline" :loading="loading" @click="getDataList">
@@ -341,7 +351,7 @@ onActivated(() => {
       </template>
       <!-- 卡片视图（参考 1Panel Docker 卡片布局） -->
       <template v-else>
-        <FaEmpty v-if="!dataList.length" description="暂无设备数据" />
+        <el-empty v-if="!dataList.length" description="暂无设备数据" />
         <div
           v-else
           class="gap-3 grid grid-cols-1 2xl:grid-cols-4 sm:grid-cols-2 xl:grid-cols-3"
@@ -412,5 +422,11 @@ onActivated(() => {
       </template>
       <FaPagination :page="pagination.page" :size="pagination.size" :total="pagination.total" class="mt-2" @page-change="currentChange" @size-change="sizeChange" />
     </FaPageMain>
+    <DeviceEditDialog
+      v-if="editingDevice"
+      v-model="showDeviceEditDialog"
+      :device="editingDevice"
+      @saved="onDeviceSaved"
+    />
   </div>
 </template>

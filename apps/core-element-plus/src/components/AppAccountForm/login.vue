@@ -73,14 +73,14 @@ function onSubmit(values: LoginModel) {
       <FaFormItem name="account">
         <FaInput type="text" placeholder="用户名" class="w-full">
           <template #start>
-            <FaIcon name="i-lucide:user" />
+            <FaIcon name="i-ri:user-line" />
           </template>
         </FaInput>
       </FaFormItem>
       <FaFormItem name="password">
         <FaInput type="password" placeholder="密码" class="w-full">
           <template #start>
-            <FaIcon name="i-lucide:lock" />
+            <FaIcon name="i-ri:lock-line" />
           </template>
         </FaInput>
       </FaFormItem>

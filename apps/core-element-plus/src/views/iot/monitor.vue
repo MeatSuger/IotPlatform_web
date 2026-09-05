@@ -1,18 +1,12 @@
 <script setup lang="ts">
 import type { TableColumn } from '@fantastic-admin/components'
-import { LineChart } from 'echarts/charts'
-import { DataZoomComponent, GridComponent, LegendComponent, ToolboxComponent, TooltipComponent } from 'echarts/components'
-import { use } from 'echarts/core'
-import { CanvasRenderer } from 'echarts/renderers'
+import * as echarts from 'echarts'
 import { computed, onActivated, onBeforeUnmount, onDeactivated, onMounted, reactive, ref, useTemplateRef, watch } from 'vue'
-import VChart from 'vue-echarts'
 import { useRoute } from 'vue-router'
 import { dataApi } from '@/api/modules/iot/data'
 import { useAppSettingsStore } from '@/store/modules/app/settings'
 
 defineOptions({ name: 'Monitor' })
-
-use([CanvasRenderer, LineChart, DataZoomComponent, GridComponent, LegendComponent, ToolboxComponent, TooltipComponent])
 
 // ==================== 查询条件 ====================
 const query = reactive({
@@ -223,36 +217,6 @@ onBeforeUnmount(() => {
   stopPolling()
 })
 
-// ==================== 图表 ====================
-const appSettingsStore = useAppSettingsStore()
-const chartTheme = computed(() => appSettingsStore.currentColorScheme === 'dark' ? 'dark' : '')
-
-const chartRef = useTemplateRef('chartRef')
-
-function enterZoomMode() {
-  const instance = chartRef.value?.chart
-  if (!instance) {
-    return
-  }
-  instance.dispatchAction({
-    type: 'takeGlobalCursor',
-    key: 'dataZoomSelect',
-    dataZoomSelectActive: true,
-  })
-}
-
-function leaveZoomMode() {
-  const instance = chartRef.value?.chart
-  if (!instance) {
-    return
-  }
-  instance.dispatchAction({
-    type: 'takeGlobalCursor',
-    key: 'dataZoomSelect',
-    dataZoomSelectActive: false,
-  })
-}
-
 function toNumber(v: unknown): number {
   const num = parseFloat(String(v ?? '').replace(/[^\d.-]/g, ''))
   return Number.isNaN(num) ? 0 : num
@@ -329,6 +293,68 @@ const chartOption = computed(() => {
     })),
   }
 })
+
+// ==================== 图表（命令式 echarts，参照 example/echarts.vue） ====================
+const appSettingsStore = useAppSettingsStore()
+const chartTheme = computed(() => appSettingsStore.currentColorScheme === 'dark' ? 'dark' : undefined)
+
+const chartEl = useTemplateRef<HTMLDivElement>('chartEl')
+let chart: echarts.ECharts | null = null
+
+function initChart() {
+  if (!chartEl.value) {
+    return
+  }
+  chart?.dispose()
+  chart = echarts.init(chartEl.value, chartTheme.value)
+  chart.setOption(chartOption.value, true)
+}
+
+function resizeChart() {
+  chart?.resize()
+}
+
+function enterZoomMode() {
+  if (!chart) {
+    return
+  }
+  chart.dispatchAction({
+    type: 'takeGlobalCursor',
+    key: 'dataZoomSelect',
+    dataZoomSelectActive: true,
+  })
+}
+
+function leaveZoomMode() {
+  if (!chart) {
+    return
+  }
+  chart.dispatchAction({
+    type: 'takeGlobalCursor',
+    key: 'dataZoomSelect',
+    dataZoomSelectActive: false,
+  })
+}
+
+// 暗色/亮色主题切换时重建实例
+watch(chartTheme, () => {
+  initChart()
+})
+
+onMounted(() => {
+  initChart()
+  window.addEventListener('resize', resizeChart)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', resizeChart)
+  chart?.dispose()
+  chart = null
+})
+// 数据变化时仅更新 option
+watch(chartOption, (option) => {
+  chart?.setOption(option, true)
+}, { deep: true })
 </script>
 
 <template>
@@ -384,7 +410,7 @@ const chartOption = computed(() => {
       <!-- 图表 -->
       <FaCard title="实时曲线" class="shrink-0">
         <div class="chart" @mouseenter="enterZoomMode" @mouseleave="leaveZoomMode">
-          <VChart ref="chartRef" class="h-full w-full" :theme="chartTheme" :option="chartOption" autoresize />
+          <div ref="chartEl" class="h-full w-full" />
         </div>
         <template #description>
           <span class="text-xs text-gray-500">鼠标悬停图表可框选缩放，滚轮可缩放</span>

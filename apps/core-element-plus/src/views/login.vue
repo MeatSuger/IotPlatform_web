@@ -46,9 +46,9 @@ function handleLogin() {
       <FaButton variant="ghost" size="icon-sm">
         <FaIcon
           :name="{
-            left: 'i-icon-park-outline:left-bar',
-            center: 'i-icon-park-outline:square',
-            right: 'i-icon-park-outline:right-bar',
+            left: 'i-ri:align-left',
+            center: 'i-ri:align-center',
+            right: 'i-ri:align-right',
           }[layoutAlign]" class="size-4"
         />
       </FaButton>

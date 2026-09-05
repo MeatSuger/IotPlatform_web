@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { FormExpose, TableColumn } from '@fantastic-admin/components'
-import type { DeviceConfig, DeviceConfigPayload, DeviceDetail } from '@/api/modules/iot/control'
+import type { DeviceDetail } from '@/api/modules/iot/control'
 import type { Sensor, SensorCreatePayload, SensorSpecs, SensorThresholds, SensorUpdatePayload } from '@/api/modules/iot/sensor'
 import type { ControllerItem, ControllerType } from '@/store/modules/controller'
 import { toTypedSchema } from '@vee-validate/zod'
@@ -9,6 +9,7 @@ import { controlApi } from '@/api/modules/iot/control'
 import { deviceApi } from '@/api/modules/iot/device'
 import { sensorApi } from '@/api/modules/iot/sensor'
 import { useDeviceWebSocket } from '@/composables/useDeviceWebSocket'
+import DeviceEditDialog from './components/DeviceEditDialog.vue'
 
 defineOptions({ name: 'DeviceControl' })
 
@@ -107,6 +108,23 @@ function backToList() {
   }
   viewMode.value = 'list'
   selectedDetail.value = null
+}
+
+// 编辑设备弹窗（基础资料 + 高级配置折叠）
+const showDeviceEditDialog = ref(false)
+
+function openDeviceEditDialog() {
+  showDeviceEditDialog.value = true
+}
+
+function onDeviceSaved() {
+  refreshDetail(true)
+}
+
+function openDeviceLog() {
+  if (selectedDetail.value) {
+    router.push({ name: 'LogDevice', query: { deviceId: selectedDetail.value.deviceId } })
+  }
 }
 
 // ==================== 传感器定义（物模型）+ 数值展示 ====================
@@ -420,170 +438,6 @@ function removeSensor(sensor: DisplaySensor) {
       }
     },
   })
-}
-
-// ==================== 设备配置（DeviceConfig 快照） ====================
-const showConfigDialog = ref(false)
-const configLoading = ref(false)
-const configSaving = ref(false)
-const configVersion = ref(0)
-const configStatus = ref('')
-
-const configForm = reactive({
-  wifiSsid: '',
-  wifiPassword: '',
-  mqttHost: '',
-  mqttPort: '1883',
-  mqttTls: false,
-  reportInterval: '60',
-  tempMin: '0',
-  tempMax: '100',
-  actuatorMode: 'auto',
-  smtpHost: '',
-  smtpPort: '465',
-  smtpSsl: true,
-  smtpUsername: '',
-  smtpPassword: '',
-  snapshotInterval: '30',
-})
-
-const actuatorModeOptions = [
-  { label: '自动', value: 'auto' },
-  { label: '手动', value: 'manual' },
-]
-
-function toNum(value: string): number | undefined {
-  const num = Number(value)
-  return Number.isNaN(num) || value === '' ? undefined : num
-}
-
-function applyConfigPayload(payload: DeviceConfigPayload | null | undefined) {
-  const network = payload?.network
-  const sensor = payload?.sensor
-  const actuator = payload?.actuator
-  const camera = payload?.camera
-  configForm.wifiSsid = network?.wifi?.ssid ?? ''
-  configForm.wifiPassword = network?.wifi?.password ?? ''
-  configForm.mqttHost = network?.mqtt?.host ?? ''
-  configForm.mqttPort = network?.mqtt?.port != null ? String(network.mqtt.port) : '1883'
-  configForm.mqttTls = network?.mqtt?.tls ?? false
-  configForm.reportInterval = sensor?.reportInterval != null ? String(sensor.reportInterval) : '60'
-  configForm.tempMin = sensor?.thresholds?.temperature?.min != null ? String(sensor.thresholds.temperature.min) : ''
-  configForm.tempMax = sensor?.thresholds?.temperature?.max != null ? String(sensor.thresholds.temperature.max) : ''
-  configForm.actuatorMode = actuator?.mode ?? 'auto'
-  configForm.smtpHost = camera?.smtp?.host ?? ''
-  configForm.smtpPort = camera?.smtp?.port != null ? String(camera.smtp.port) : '465'
-  configForm.smtpSsl = camera?.smtp?.ssl ?? true
-  configForm.smtpUsername = camera?.smtp?.username ?? ''
-  configForm.smtpPassword = camera?.smtp?.password ?? ''
-  configForm.snapshotInterval = camera?.snapshotInterval != null ? String(camera.snapshotInterval) : '30'
-}
-
-function buildConfigPayload(): DeviceConfigPayload {
-  const payload: DeviceConfigPayload = {}
-
-  const network: NonNullable<DeviceConfigPayload['network']> = {}
-  if (configForm.wifiSsid || configForm.wifiPassword) {
-    network.wifi = { ssid: configForm.wifiSsid, password: configForm.wifiPassword }
-  }
-  if (configForm.mqttHost) {
-    network.mqtt = { host: configForm.mqttHost, port: toNum(configForm.mqttPort), tls: configForm.mqttTls }
-  }
-  if (Object.keys(network).length) {
-    payload.network = network
-  }
-
-  const sensor: NonNullable<DeviceConfigPayload['sensor']> = {}
-  if (configForm.reportInterval !== '60' || configForm.tempMin || configForm.tempMax) {
-    if (configForm.reportInterval !== '60') {
-      sensor.reportInterval = toNum(configForm.reportInterval)
-    }
-    const temperature: { min?: number, max?: number } = {}
-    if (configForm.tempMin) {
-      temperature.min = toNum(configForm.tempMin)
-    }
-    if (configForm.tempMax) {
-      temperature.max = toNum(configForm.tempMax)
-    }
-    if (Object.keys(temperature).length) {
-      sensor.thresholds = { temperature }
-    }
-  }
-  if (Object.keys(sensor).length) {
-    payload.sensor = sensor
-  }
-
-  if (configForm.actuatorMode !== 'auto') {
-    payload.actuator = { mode: configForm.actuatorMode }
-  }
-
-  const camera: NonNullable<DeviceConfigPayload['camera']> = {}
-  if (configForm.smtpHost) {
-    camera.protocol = 'smtp'
-    camera.smtp = {
-      host: configForm.smtpHost,
-      port: toNum(configForm.smtpPort),
-      ssl: configForm.smtpSsl,
-      username: configForm.smtpUsername,
-      password: configForm.smtpPassword,
-    }
-  }
-  if (configForm.snapshotInterval !== '30') {
-    camera.snapshotInterval = toNum(configForm.snapshotInterval)
-  }
-  if (Object.keys(camera).length) {
-    payload.camera = camera
-  }
-
-  return payload
-}
-
-async function openConfigDialog() {
-  const deviceId = selectedDetail.value?.deviceId
-  if (!deviceId) {
-    return
-  }
-  configLoading.value = true
-  try {
-    const res: any = await controlApi.getConfig(deviceId)
-    const config: DeviceConfig = res?.data?.data ?? res?.data
-    configVersion.value = config?.version ?? 0
-    configStatus.value = config?.status ?? ''
-    applyConfigPayload(config?.payload)
-  }
-  catch {
-    configVersion.value = 0
-    configStatus.value = ''
-    applyConfigPayload(null)
-  }
-  finally {
-    configLoading.value = false
-    showConfigDialog.value = true
-  }
-}
-
-async function saveConfig() {
-  const deviceId = selectedDetail.value?.deviceId
-  if (!deviceId) {
-    return
-  }
-  configSaving.value = true
-  try {
-    const res: any = await controlApi.setConfig(deviceId, buildConfigPayload())
-    const data = res?.data?.data ?? res?.data
-    if (data?.version != null) {
-      configVersion.value = data.version
-    }
-    configStatus.value = data?.status ?? 'pending'
-    showConfigDialog.value = false
-    useFaToast().success('配置已保存并下发')
-  }
-  catch {
-    useFaToast().error('配置保存失败')
-  }
-  finally {
-    configSaving.value = false
-  }
 }
 
 // ==================== 控制器 ====================
@@ -918,9 +772,13 @@ onBeforeUnmount(() => {
           <FaTag :variant="wsConnected ? 'default' : 'secondary'">
             {{ wsConnected ? 'WSS 已连接' : 'HTTP' }}
           </FaTag>
-          <FaButton variant="outline" size="sm" :loading="configLoading" @click="openConfigDialog">
-            <FaIcon name="i-material-symbols:settings-outline" class="mr-1 size-4" />
-            配置
+          <FaButton variant="outline" size="sm" @click="openDeviceEditDialog">
+            <FaIcon name="i-ri:edit-line" class="mr-1 size-4" />
+            编辑
+          </FaButton>
+          <FaButton variant="outline" size="sm" @click="openDeviceLog">
+            <FaIcon name="i-ri:file-list-3-line" class="mr-1 size-4" />
+            日志
           </FaButton>
           <FaButton variant="outline" size="sm" :loading="dispatchLoading" @click="dispatchDeviceConfig">
             下发设备
@@ -973,7 +831,7 @@ onBeforeUnmount(() => {
                     </FaButton>
                   </FaButtonGroup>
                   <FaButton variant="outline" size="sm" @click="openAddSensorDialog">
-                    <FaIcon name="i-material-symbols:add" class="mr-1 size-4" />
+                    <FaIcon name="i-ri:add-line" class="mr-1 size-4" />
                     添加
                   </FaButton>
                   <FaButton variant="outline" size="sm" :loading="detailLoading" @click="refreshDetail()">
@@ -1037,7 +895,7 @@ onBeforeUnmount(() => {
                   </FaDropdown>
                 </template>
               </FaTable>
-              <FaEmpty v-else description="无传感器数据" />
+              <el-empty v-else description="无传感器数据" />
             </template>
 
             <!-- 网格视图（对齐设备信息卡片） -->
@@ -1098,7 +956,7 @@ onBeforeUnmount(() => {
                   </div>
                 </FaCard>
               </div>
-              <FaEmpty v-else description="无传感器数据" />
+              <el-empty v-else description="无传感器数据" />
             </template>
           </FaCard>
 
@@ -1107,12 +965,12 @@ onBeforeUnmount(() => {
               <div class="flex w-full items-center justify-between">
                 <span>控制器</span>
                 <FaButton variant="outline" size="sm" @click="openAddDialog">
-                  <FaIcon name="i-material-symbols:add" class="mr-1 size-4" />
+                  <FaIcon name="i-ri:add-line" class="mr-1 size-4" />
                   添加
                 </FaButton>
               </div>
             </template>
-            <FaEmpty v-if="currentControllers.length === 0" description="暂无控制器，点击添加" />
+            <el-empty v-if="currentControllers.length === 0" description="暂无控制器，点击添加" />
             <div v-else class="flex flex-col gap-3">
               <div v-for="ctrl in currentControllers" :key="ctrl.id" class="p-3 border rounded-lg flex flex-col gap-2">
                 <div class="flex items-center justify-between">
@@ -1121,7 +979,7 @@ onBeforeUnmount(() => {
                     variant="ghost" size="icon" class="text-gray-400 size-6 hover:text-red-500"
                     @click="removeController(ctrl.id)"
                   >
-                    <FaIcon name="i-material-symbols:close" class="size-3.5" />
+                    <FaIcon name="i-ri:close-line" class="size-3.5" />
                   </FaButton>
                 </div>
                 <div class="text-xs text-gray-400">
@@ -1153,104 +1011,13 @@ onBeforeUnmount(() => {
       </div>
     </template>
 
-    <!-- 设备配置弹窗 -->
-    <FaModal
-      v-model="showConfigDialog" title="设备配置" show-cancel-button
-      :confirm-button-loading="configSaving" @confirm="saveConfig" @cancel="showConfigDialog = false"
-    >
-      <div v-if="configVersion > 0" class="text-xs text-gray-400 mb-2">
-        当前版本 v{{ configVersion }} · 状态：{{ configStatus || '未确认' }}
-      </div>
-      <div class="py-2 pr-1 flex flex-col gap-4 max-h-70vh min-w-0 overflow-auto overflow-x-hidden">
-        <div class="flex flex-col gap-2">
-          <div class="text-sm text-muted-foreground font-semibold">
-            网络 (network)
-          </div>
-          <div class="gap-3 grid grid-cols-1 sm:grid-cols-2">
-            <div class="flex flex-col gap-1">
-              <label class="text-sm font-medium">WiFi SSID</label>
-              <FaInput v-model="configForm.wifiSsid" placeholder="如：MyWiFi" class="w-full" />
-            </div>
-            <div class="flex flex-col gap-1">
-              <label class="text-sm font-medium">WiFi 密码</label>
-              <FaInput v-model="configForm.wifiPassword" placeholder="WiFi 密码" type="password" class="w-full" />
-            </div>
-            <div class="flex flex-col gap-1">
-              <label class="text-sm font-medium">MQTT Host</label>
-              <FaInput v-model="configForm.mqttHost" placeholder="如：broker.example.com" class="w-full" />
-            </div>
-            <div class="flex flex-col gap-1">
-              <label class="text-sm font-medium">MQTT Port</label>
-              <FaInput v-model="configForm.mqttPort" placeholder="1883" class="w-full" />
-            </div>
-          </div>
-          <FaCheckbox v-model="configForm.mqttTls">
-            MQTT TLS
-          </FaCheckbox>
-        </div>
-
-        <div class="flex flex-col gap-2">
-          <div class="text-sm text-muted-foreground font-semibold">
-            传感器 (sensor)
-          </div>
-          <div class="gap-3 grid grid-cols-1 sm:grid-cols-3">
-            <div class="flex flex-col gap-1">
-              <label class="text-sm font-medium">上报间隔 (s)</label>
-              <FaInput v-model="configForm.reportInterval" placeholder="60" class="w-full" />
-            </div>
-            <div class="flex flex-col gap-1">
-              <label class="text-sm font-medium">温度下限 (°C)</label>
-              <FaInput v-model="configForm.tempMin" placeholder="0" class="w-full" />
-            </div>
-            <div class="flex flex-col gap-1">
-              <label class="text-sm font-medium">温度上限 (°C)</label>
-              <FaInput v-model="configForm.tempMax" placeholder="100" class="w-full" />
-            </div>
-          </div>
-        </div>
-
-        <div class="flex flex-col gap-2">
-          <div class="text-sm text-muted-foreground font-semibold">
-            执行器 (actuator)
-          </div>
-          <div class="flex flex-col gap-1 w-full sm:w-1/2">
-            <label class="text-sm font-medium">模式</label>
-            <FaSelect v-model="configForm.actuatorMode" :options="actuatorModeOptions" class="w-full" />
-          </div>
-        </div>
-
-        <div class="flex flex-col gap-2">
-          <div class="text-sm text-muted-foreground font-semibold">
-            摄像头 (camera)
-          </div>
-          <div class="gap-3 grid grid-cols-1 sm:grid-cols-2">
-            <div class="flex flex-col gap-1">
-              <label class="text-sm font-medium">SMTP Host</label>
-              <FaInput v-model="configForm.smtpHost" placeholder="如：smtp.example.com" class="w-full" />
-            </div>
-            <div class="flex flex-col gap-1">
-              <label class="text-sm font-medium">SMTP Port</label>
-              <FaInput v-model="configForm.smtpPort" placeholder="465" class="w-full" />
-            </div>
-            <div class="flex flex-col gap-1">
-              <label class="text-sm font-medium">SMTP 用户名</label>
-              <FaInput v-model="configForm.smtpUsername" placeholder="邮箱账号" class="w-full" />
-            </div>
-            <div class="flex flex-col gap-1">
-              <label class="text-sm font-medium">SMTP 密码</label>
-              <FaInput v-model="configForm.smtpPassword" type="password" placeholder="授权码" class="w-full" />
-            </div>
-            <div class="flex flex-col gap-1">
-              <label class="text-sm font-medium">抓拍间隔 (s)</label>
-              <FaInput v-model="configForm.snapshotInterval" placeholder="30" class="w-full" />
-            </div>
-          </div>
-          <FaCheckbox v-model="configForm.smtpSsl">
-            SMTP SSL
-          </FaCheckbox>
-        </div>
-      </div>
-    </FaModal>
+    <!-- 编辑设备弹窗（基础资料必填 + 高级配置折叠） -->
+    <DeviceEditDialog
+      v-model="showDeviceEditDialog"
+      :device="selectedDetail"
+      advanced
+      @saved="onDeviceSaved"
+    />
 
     <!-- 新增 / 编辑传感器弹窗 -->
     <FaModal
@@ -1318,7 +1085,7 @@ onBeforeUnmount(() => {
           <div class="flex items-center justify-between">
             <span class="text-sm font-medium">扩展属性 (attrs)</span>
             <FaButton variant="outline" size="sm" type="button" @click="addAttrRow">
-              <FaIcon name="i-material-symbols:add" class="mr-1 size-4" />
+              <FaIcon name="i-ri:add-line" class="mr-1 size-4" />
               添加属性
             </FaButton>
           </div>
@@ -1327,7 +1094,7 @@ onBeforeUnmount(() => {
               <FaInput v-model="row.key" placeholder="key" class="w-40" />
               <FaInput v-model="row.value" placeholder="value" class="flex-1" />
               <FaButton variant="ghost" size="icon-sm" type="button" class="text-gray-400 hover:text-red-500" @click="removeAttrRow(index)">
-                <FaIcon name="i-material-symbols:close" class="size-4" />
+                <FaIcon name="i-ri:close-line" class="size-4" />
               </FaButton>
             </div>
           </div>

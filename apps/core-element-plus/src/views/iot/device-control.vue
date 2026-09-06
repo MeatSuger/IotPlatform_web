@@ -1,16 +1,16 @@
 <script setup lang="ts">
-import type { FormExpose, TableColumn } from '@fantastic-admin/components'
-import type { Actuator, ActuatorCreatePayload, ActuatorDriver, ActuatorTransport, ActuatorUpdatePayload } from '@/api/modules/iot/actuator'
+import type { TableColumn } from '@fantastic-admin/components'
+import type { Actuator } from '@/api/modules/iot/actuator'
 import type { DeviceDetail } from '@/api/modules/iot/control'
-import type { Sensor, SensorCreatePayload, SensorSpecs, SensorThresholds, SensorUpdatePayload } from '@/api/modules/iot/sensor'
-import { toTypedSchema } from '@vee-validate/zod'
-import * as z from 'zod'
-import { ACTUATOR_TRANSPORT_FIELDS, actuatorApi, actuatorDrivers, actuatorTransportLabels, actuatorTransports } from '@/api/modules/iot/actuator'
+import type { Sensor } from '@/api/modules/iot/sensor'
+import { actuatorApi } from '@/api/modules/iot/actuator'
 import { controlApi } from '@/api/modules/iot/control'
 import { deviceApi } from '@/api/modules/iot/device'
 import { sensorApi } from '@/api/modules/iot/sensor'
 import { useDeviceWebSocket } from '@/composables/useDeviceWebSocket'
+import ActuatorEditDialog from './components/ActuatorEditDialog.vue'
 import DeviceEditDialog from './components/DeviceEditDialog.vue'
+import SensorEditDialog from './components/SensorEditDialog.vue'
 
 defineOptions({ name: 'DeviceControl' })
 
@@ -167,242 +167,25 @@ function switchSensorToGrid() {
   sensorViewMode.value = 'grid'
 }
 
-// ==================== 新增 / 编辑 / 删除 传感器定义（弹窗 FaForm） ====================
-const sensorTypeOptions = [
-  { label: '温度 (temperature)', value: 'temperature' },
-  { label: '湿度 (humidity)', value: 'humidity' },
-  { label: '光照 (light)', value: 'light' },
-  { label: '开关 (switch)', value: 'switch' },
-  { label: '自定义 (custom)', value: 'custom' },
-]
-
-const sensorDataTypeOptions = [
-  { label: '浮点 (float)', value: 'float' },
-  { label: '整数 (int)', value: 'int' },
-  { label: '布尔 (bool)', value: 'bool' },
-  { label: '文本 (text)', value: 'text' },
-  { label: '枚举 (enum)', value: 'enum' },
-]
-
+// ==================== 新增 / 编辑 / 删除 传感器定义（弹窗 SensorEditDialog） ====================
 const showSensorDialog = ref(false)
 const sensorDialogMode = ref<'add' | 'edit'>('add')
-const sensorSaving = ref(false)
-const editingSensorId = ref('')
-
-interface SensorFormModel {
-  id: string
-  name: string
-  type: string
-  dataType: string
-  unit: string
-  reportInterval: string
-  enabled: boolean
-  specs: { min: string, max: string, step: string }
-  thresholds: { min: string, max: string, alarm: boolean }
-  attrsRows: { key: string, value: string }[]
-}
-
-const sensorFormRef = useTemplateRef<FormExpose>('sensorFormRef')
-
-const sensorFormModel = ref<SensorFormModel>({
-  id: '',
-  name: '',
-  type: 'temperature',
-  dataType: 'float',
-  unit: '',
-  reportInterval: '60',
-  enabled: true,
-  specs: { min: '', max: '', step: '' },
-  thresholds: { min: '', max: '', alarm: false },
-  attrsRows: [],
-})
-
-const sensorValidationSchema = toTypedSchema(z.object({
-  id: z.string().regex(/^[a-z]\w{0,49}$/i, '字母开头，仅含字母/数字/下划线，≤50'),
-  name: z.string().min(1, '请输入名称').max(100, '名称最多 100 字符'),
-  type: z.string().min(1, '请选择类别'),
-  dataType: z.string().min(1, '请选择数据类型'),
-  unit: z.string().max(32, '单位最多 32 字符'),
-}))
-
-function toNumber(value: string): number | undefined {
-  const trimmed = String(value ?? '').trim()
-  if (trimmed === '') {
-    return undefined
-  }
-  const num = Number(trimmed)
-  return Number.isNaN(num) ? undefined : num
-}
-
-function resetSensorFormModel() {
-  sensorFormModel.value = {
-    id: '',
-    name: '',
-    type: 'temperature',
-    dataType: 'float',
-    unit: '',
-    reportInterval: '60',
-    enabled: true,
-    specs: { min: '', max: '', step: '' },
-    thresholds: { min: '', max: '', alarm: false },
-    attrsRows: [],
-  }
-}
+const editingSensor = ref<DisplaySensor | null>(null)
 
 function openAddSensorDialog() {
   sensorDialogMode.value = 'add'
-  editingSensorId.value = ''
-  resetSensorFormModel()
+  editingSensor.value = null
   showSensorDialog.value = true
 }
 
 function openEditSensorDialog(sensor: DisplaySensor) {
   sensorDialogMode.value = 'edit'
-  editingSensorId.value = sensor.id
-  const specs = sensor.specs ?? {}
-  const thresholds = sensor.thresholds ?? {}
-  const attrs = sensor.attrs ?? {}
-  sensorFormModel.value = {
-    id: sensor.id,
-    name: sensor.name,
-    type: sensor.type || 'temperature',
-    dataType: sensor.dataType ?? 'float',
-    unit: sensor.unit ?? '',
-    reportInterval: sensor.reportInterval != null ? String(sensor.reportInterval) : '60',
-    enabled: sensor.enabled ?? true,
-    specs: {
-      min: specs.min != null ? String(specs.min) : '',
-      max: specs.max != null ? String(specs.max) : '',
-      step: specs.step != null ? String(specs.step) : '',
-    },
-    thresholds: {
-      min: thresholds.min != null ? String(thresholds.min) : '',
-      max: thresholds.max != null ? String(thresholds.max) : '',
-      alarm: thresholds.alarm ?? false,
-    },
-    attrsRows: Object.entries(attrs).map(([key, value]) => ({ key, value: String(value) })),
-  }
+  editingSensor.value = sensor
   showSensorDialog.value = true
 }
 
-function addAttrRow() {
-  sensorFormModel.value.attrsRows.push({ key: '', value: '' })
-}
-
-function removeAttrRow(index: number) {
-  sensorFormModel.value.attrsRows.splice(index, 1)
-}
-
-// 组装提交载荷：specs/thresholds/attrs 为空子键时省略
-function buildSensorPayload(): SensorUpdatePayload {
-  const m = sensorFormModel.value
-  const payload: SensorUpdatePayload = {
-    name: m.name.trim(),
-    type: m.type,
-    dataType: m.dataType as Sensor['dataType'],
-    unit: m.unit.trim(),
-    reportInterval: toNumber(m.reportInterval) ?? 0,
-    enabled: m.enabled,
-  }
-
-  const specs: SensorSpecs = {}
-  const min = toNumber(m.specs.min)
-  const max = toNumber(m.specs.max)
-  const step = toNumber(m.specs.step)
-  if (min != null) {
-    specs.min = min
-  }
-  if (max != null) {
-    specs.max = max
-  }
-  if (step != null) {
-    specs.step = step
-  }
-  if (Object.keys(specs).length) {
-    payload.specs = specs
-  }
-
-  const thresholds: SensorThresholds = {}
-  const tMin = toNumber(m.thresholds.min)
-  const tMax = toNumber(m.thresholds.max)
-  if (tMin != null) {
-    thresholds.min = tMin
-  }
-  if (tMax != null) {
-    thresholds.max = tMax
-  }
-  if (m.thresholds.alarm) {
-    thresholds.alarm = true
-  }
-  if (Object.keys(thresholds).length) {
-    payload.thresholds = thresholds
-  }
-
-  const attrs: Record<string, string> = {}
-  m.attrsRows.forEach((row) => {
-    const key = row.key.trim()
-    if (key) {
-      attrs[key] = row.value
-    }
-  })
-  if (Object.keys(attrs).length) {
-    payload.attrs = attrs
-  }
-
-  return payload
-}
-
-// 弹窗关闭守卫：确认时先校验 + 提交，成功才关闭（失败保持弹窗可见，字段红字提示）
-async function handleSensorClose(action: 'confirm' | 'cancel' | 'close', done: () => void) {
-  if (action !== 'confirm') {
-    done()
-    return
-  }
-  // vee-validate 校验（字段错误由 FaFormItem 红字展示）
-  const result = await sensorFormRef.value?.validate()
-  if (result && !result.valid) {
-    return
-  }
-  const ok = await submitSensor()
-  if (ok) {
-    done()
-  }
-}
-
-// 提交（返回是否成功；成功时刷新详情数据源）
-async function submitSensor(): Promise<boolean> {
-  const deviceId = selectedDetail.value?.deviceId
-  if (!deviceId) {
-    return false
-  }
-  const payload = buildSensorPayload()
-  sensorSaving.value = true
-  try {
-    if (sensorDialogMode.value === 'add') {
-      const { name: nameVal, type: typeVal, ...restPayload } = payload
-      const createPayload: SensorCreatePayload = {
-        ...restPayload,
-        id: sensorFormModel.value.id.trim(),
-        name: nameVal ?? '',
-        type: typeVal ?? '',
-      }
-      await sensorApi.create(deviceId, createPayload)
-      useFaToast().success('传感器添加成功')
-    }
-    else {
-      await sensorApi.update(deviceId, editingSensorId.value, payload)
-      useFaToast().success('传感器更新成功')
-    }
-    await refreshDetail(true)
-    return true
-  }
-  catch {
-    useFaToast().error(sensorDialogMode.value === 'add' ? '传感器添加失败' : '传感器更新失败')
-    return false
-  }
-  finally {
-    sensorSaving.value = false
-  }
+function onSensorSaved() {
+  refreshDetail(true)
 }
 
 function removeSensor(sensor: DisplaySensor) {
@@ -430,195 +213,25 @@ function removeSensor(sensor: DisplaySensor) {
 // 执行器物模型直接来自详情接口（data.actuators = 定义数组），CRUD/下发后刷新详情即可
 const actuators = computed<Actuator[]>(() => selectedDetail.value?.actuators ?? [])
 
-// —— 定义 CRUD（仅持久化；改动后需点击「下发设备」经 /actuators/apply 编译下发） ——
-// driver：后端枚举兼容标识（固件忽略）；设备类型 = config.transport（固件按此实例化）
-const actuatorDriverOptions = actuatorDrivers.map(driver => ({
-  label: driver,
-  value: driver,
-}))
-
-const actuatorTransportOptions = actuatorTransports.map(transport => ({
-  label: actuatorTransportLabels[transport],
-  value: transport,
-}))
-
+// ==================== 新增 / 编辑 / 删除 执行器定义（弹窗 ActuatorEditDialog） ====================
 const showActuatorDialog = ref(false)
 const actuatorDialogMode = ref<'add' | 'edit'>('add')
-const editingActuatorId = ref('')
-const actuatorSaving = ref(false)
-
-const actuatorForm = reactive<{
-  id: string
-  name: string
-  driver: ActuatorDriver
-  transport: ActuatorTransport
-  enabled: boolean
-  // 表单编辑值（字符串输入 / 开关布尔），提交时按字段表转换
-  config: Record<string, any>
-}>({
-  id: '',
-  name: '',
-  driver: 'led',
-  transport: 'gpio',
-  enabled: true,
-  config: {},
-})
-
-// 当前 transport 的字段定义（驱动弹窗渲染与提交转换）
-const actuatorTransportFields = computed(() => ACTUATOR_TRANSPORT_FIELDS[actuatorForm.transport])
-
-// 编辑中的旧版定义（config 无 transport 字段）提示升级
-const editingLegacyActuator = ref(false)
-
-function resetActuatorConfigFields() {
-  Object.keys(actuatorForm.config).forEach((key) => {
-    delete actuatorForm.config[key]
-  })
-  for (const field of ACTUATOR_TRANSPORT_FIELDS[actuatorForm.transport]) {
-    if (field.default !== undefined) {
-      actuatorForm.config[field.key] = field.type === 'bool'
-        ? Boolean(field.default)
-        : String(field.default)
-    }
-    else if (field.type === 'bool') {
-      actuatorForm.config[field.key] = true
-    }
-  }
-}
-
-// 新增时切换 transport → 参数回默认
-watch(() => actuatorForm.transport, () => {
-  if (actuatorDialogMode.value === 'add') {
-    resetActuatorConfigFields()
-  }
-})
+const editingActuator = ref<Actuator | null>(null)
 
 function openAddActuatorDialog() {
   actuatorDialogMode.value = 'add'
-  editingActuatorId.value = ''
-  actuatorForm.id = ''
-  actuatorForm.name = ''
-  actuatorForm.driver = 'led'
-  actuatorForm.transport = 'gpio'
-  actuatorForm.enabled = true
-  editingLegacyActuator.value = false
-  resetActuatorConfigFields()
+  editingActuator.value = null
   showActuatorDialog.value = true
 }
 
 function openEditActuatorDialog(act: Actuator) {
   actuatorDialogMode.value = 'edit'
-  editingActuatorId.value = act.id
-  actuatorForm.id = act.id
-  actuatorForm.name = act.name ?? ''
-  actuatorForm.driver = act.driver
-  const legacy = !act.config?.transport
-  editingLegacyActuator.value = legacy
-  actuatorForm.transport = legacy
-    ? 'gpio'
-    : (actuatorTransports.includes(act.config!.transport) ? act.config!.transport : 'gpio')
-  actuatorForm.enabled = act.enabled ?? true
-  resetActuatorConfigFields()
-  const config = act.config ?? {}
-  for (const field of actuatorTransportFields.value) {
-    if (config[field.key] != null) {
-      actuatorForm.config[field.key] = field.type === 'bool'
-        ? Boolean(config[field.key])
-        : String(config[field.key])
-    }
-  }
+  editingActuator.value = act
   showActuatorDialog.value = true
-  if (legacy) {
-    useFaToast().warning('该定义为旧版驱动模型，保存后将升级为 transport 模型')
-  }
 }
 
-// 弹窗关闭守卫：确认时提交成功才关闭（失败保持弹窗可见）
-async function handleActuatorClose(action: 'confirm' | 'cancel' | 'close', done: () => void) {
-  if (action !== 'confirm') {
-    done()
-    return
-  }
-  const ok = await onActuatorSubmit()
-  if (ok) {
-    done()
-  }
-}
-
-async function onActuatorSubmit(): Promise<boolean> {
-  const deviceId = selectedDetail.value?.deviceId
-  if (!deviceId) {
-    return false
-  }
-  const id = actuatorForm.id.trim()
-  if (!/^[a-z][a-z0-9_]{0,10}$/.test(id)) {
-    useFaToast().warning('标识需小写字母开头，仅含小写字母/数字/下划线，≤11 字符')
-    return false
-  }
-
-  // 组装 config：transport 固定注入，字段按当前 transport 的表驱动转换
-  const config: Record<string, any> = { transport: actuatorForm.transport }
-  for (const field of actuatorTransportFields.value) {
-    const raw = actuatorForm.config[field.key]
-    if (field.type === 'bool') {
-      config[field.key] = Boolean(raw)
-      continue
-    }
-    if (field.type === 'select') {
-      const sel = String(raw ?? '').trim()
-      if (sel !== '') {
-        const num = Number(sel)
-        config[field.key] = Number.isNaN(num) ? sel : num
-      }
-      continue
-    }
-    const trimmed = String(raw ?? '').trim()
-    if (trimmed === '') {
-      if (field.required) {
-        useFaToast().warning(`${field.label} 为必填`)
-        return false
-      }
-      continue
-    }
-    const num = Number(trimmed)
-    if (Number.isNaN(num)) {
-      useFaToast().warning(`${field.label} 需为数字`)
-      return false
-    }
-    config[field.key] = num
-  }
-
-  const common = {
-    name: actuatorForm.name.trim(),
-    enabled: actuatorForm.enabled,
-  }
-  actuatorSaving.value = true
-  try {
-    if (actuatorDialogMode.value === 'add') {
-      const payload: ActuatorCreatePayload = {
-        id,
-        driver: actuatorForm.driver,
-        ...common,
-        config,
-      }
-      await actuatorApi.create(deviceId, payload)
-      useFaToast().success('执行器添加成功')
-    }
-    else {
-      const payload: ActuatorUpdatePayload = { ...common, config }
-      await actuatorApi.update(deviceId, editingActuatorId.value, payload)
-      useFaToast().success('执行器更新成功')
-    }
-    await refreshDetail(true)
-    return true
-  }
-  catch {
-    useFaToast().error(actuatorDialogMode.value === 'add' ? '执行器添加失败' : '执行器更新失败')
-    return false
-  }
-  finally {
-    actuatorSaving.value = false
-  }
+function onActuatorSaved() {
+  refreshDetail(true)
 }
 
 function removeActuator(act: Actuator) {
@@ -1345,163 +958,21 @@ onBeforeUnmount(() => {
     />
 
     <!-- 新增 / 编辑传感器弹窗 -->
-    <FaModal
-      v-model="showSensorDialog" :title="sensorDialogMode === 'add' ? '添加传感器' : '编辑传感器'"
-      show-cancel-button :confirm-button-loading="sensorSaving"
-      :before-close="handleSensorClose" @confirm="showSensorDialog = false"
-      @cancel="showSensorDialog = false"
-    >
-      <FaForm
-        v-if="showSensorDialog"
-        ref="sensorFormRef"
-        :model="sensorFormModel"
-        :validation-schema="sensorValidationSchema"
-        class="gap-3 grid grid-cols-2 min-w-0"
-      >
-        <FaFormItem name="id" label="标识 (id)" class="col-span-1" required>
-          <FaInput placeholder="如 temperature" :disabled="sensorDialogMode === 'edit'" class="w-full" />
-        </FaFormItem>
-        <FaFormItem name="name" label="名称" class="col-span-1" required>
-          <FaInput placeholder="如：温度" class="w-full" />
-        </FaFormItem>
-        <FaFormItem name="type" label="类别" class="col-span-1" required>
-          <FaInput placeholder="如 temperature / humidity / 自定义" class="w-full" />
-          <div class="pt-1.5 flex flex-wrap gap-1">
-            <FaButton
-              v-for="opt in sensorTypeOptions" :key="opt.value" size="sm" variant="outline" type="button"
-              :class="sensorFormModel.type === opt.value ? 'ring-1 ring-primary' : ''"
-              @click="sensorFormModel.type = opt.value"
-            >
-              {{ opt.label }}
-            </FaButton>
-          </div>
-          <span class="text-xs text-gray-400 pt-1">type 无后端枚举限制；固件需注册对应采集器（temperature 内置，其余按需扩展）</span>
-        </FaFormItem>
-        <FaFormItem name="dataType" label="数据类型" class="col-span-1" required>
-          <FaSelect :options="sensorDataTypeOptions" class="w-full" />
-        </FaFormItem>
-        <FaFormItem name="unit" label="单位" class="col-span-1">
-          <FaInput placeholder="如：°C、%RH" class="w-full" />
-        </FaFormItem>
-        <div class="flex flex-col gap-1 col-span-1">
-          <label class="text-sm font-medium">上报周期 (s)</label>
-          <FaInput v-model="sensorFormModel.reportInterval" type="number" placeholder="0 = 继承设备全局" class="w-full" />
-        </div>
-        <div class="flex gap-3 col-span-2 items-center">
-          <label class="text-sm font-medium">启用</label>
-          <FaSwitch v-model="sensorFormModel.enabled" />
-        </div>
-
-        <!-- 量程 specs -->
-        <div class="flex flex-col gap-1 col-span-2">
-          <span class="text-sm font-medium">量程 (specs)</span>
-          <div class="gap-3 grid grid-cols-3">
-            <FaInput v-model="sensorFormModel.specs.min" type="number" placeholder="min" class="w-full" />
-            <FaInput v-model="sensorFormModel.specs.max" type="number" placeholder="max" class="w-full" />
-            <FaInput v-model="sensorFormModel.specs.step" type="number" placeholder="step" class="w-full" />
-          </div>
-        </div>
-
-        <!-- 阈值 thresholds -->
-        <div class="flex flex-col gap-2 col-span-2">
-          <span class="text-sm font-medium">告警阈值 (thresholds)</span>
-          <div class="gap-3 grid grid-cols-2">
-            <FaInput v-model="sensorFormModel.thresholds.min" type="number" placeholder="min" class="w-full" />
-            <FaInput v-model="sensorFormModel.thresholds.max" type="number" placeholder="max" class="w-full" />
-          </div>
-          <div class="flex gap-3 items-center">
-            <label class="text-sm font-medium">告警</label>
-            <FaSwitch v-model="sensorFormModel.thresholds.alarm" />
-          </div>
-        </div>
-
-        <!-- 扩展属性 attrs（键值对动态行） -->
-        <div class="flex flex-col gap-2 col-span-2">
-          <div class="flex items-center justify-between">
-            <span class="text-sm font-medium">扩展属性 (attrs)</span>
-            <FaButton variant="outline" size="sm" type="button" @click="addAttrRow">
-              <FaIcon name="i-ri:add-line" class="mr-1 size-4" />
-              添加属性
-            </FaButton>
-          </div>
-          <div v-if="sensorFormModel.attrsRows.length" class="flex flex-col gap-2">
-            <div v-for="(row, index) in sensorFormModel.attrsRows" :key="index" class="flex gap-2 items-center">
-              <FaInput v-model="row.key" placeholder="key" class="w-40" />
-              <FaInput v-model="row.value" placeholder="value" class="flex-1" />
-              <FaButton variant="ghost" size="icon-sm" type="button" class="text-gray-400 hover:text-red-500" @click="removeAttrRow(index)">
-                <FaIcon name="i-ri:close-line" class="size-4" />
-              </FaButton>
-            </div>
-          </div>
-          <span v-else class="text-xs text-gray-400">暂无扩展属性</span>
-        </div>
-      </FaForm>
-    </FaModal>
+    <SensorEditDialog
+      v-model="showSensorDialog"
+      :device-id="selectedDetail?.deviceId ?? ''"
+      :mode="sensorDialogMode"
+      :sensor="editingSensor"
+      @saved="onSensorSaved"
+    />
 
     <!-- 新增 / 编辑执行器弹窗（定义仅持久化，改动后点「下发设备」生效） -->
-    <!-- 设备类型 = config.transport（固件按此实例化）；driver 为后端兼容标识（固件忽略），由用户自选 -->
-    <FaModal
-      v-model="showActuatorDialog" :title="actuatorDialogMode === 'add' ? '添加执行器' : '编辑执行器'"
-      show-cancel-button :confirm-button-loading="actuatorSaving"
-      :before-close="handleActuatorClose" @confirm="showActuatorDialog = false"
-      @cancel="showActuatorDialog = false"
-    >
-      <div class="py-2 flex flex-col gap-4">
-        <div v-if="editingLegacyActuator" class="text-xs text-amber-500">
-          旧版驱动模型定义，保存后将升级为 transport 模型（config.transport）
-        </div>
-        <div class="flex flex-col gap-1">
-          <label class="text-sm font-medium">标识 (id)</label>
-          <FaInput v-model="actuatorForm.id" placeholder="如：relay1、fan1" :disabled="actuatorDialogMode === 'edit'" class="w-full" />
-          <span class="text-xs text-gray-400">小写字母开头，≤11 字符；= 设备侧控制命令 action</span>
-        </div>
-        <div class="flex flex-col gap-1">
-          <label class="text-sm font-medium">名称（可选）</label>
-          <FaInput v-model="actuatorForm.name" placeholder="如：继电器" class="w-full" />
-        </div>
-        <div class="gap-3 grid grid-cols-2">
-          <div class="flex flex-col gap-1">
-            <label class="text-sm font-medium">设备类型 (transport)</label>
-            <FaSelect v-model="actuatorForm.transport" :options="actuatorTransportOptions" class="w-full" />
-          </div>
-          <div class="flex flex-col gap-1">
-            <label class="text-sm font-medium">兼容标识 (driver)</label>
-            <FaSelect
-              v-model="actuatorForm.driver" :options="actuatorDriverOptions"
-              :disabled="actuatorDialogMode === 'edit'" class="w-full"
-            />
-            <span class="text-xs text-gray-400">后端枚举占位（led/servo/speaker），固件忽略，仅需通过后端校验</span>
-          </div>
-        </div>
-        <div class="flex flex-col gap-2">
-          <span class="text-sm font-medium">参数 (config)</span>
-          <div class="gap-3 grid grid-cols-2">
-            <template v-for="field in actuatorTransportFields" :key="field.key">
-              <div v-if="field.type === 'bool'" class="flex gap-3 col-span-2 items-center">
-                <FaSwitch v-model="actuatorForm.config[field.key]" />
-                <span class="text-sm text-gray-400">{{ field.label }}<span v-if="field.hint">（{{ field.hint }}）</span></span>
-              </div>
-              <div v-else-if="field.type === 'select'" class="flex flex-col gap-1">
-                <label class="text-sm text-gray-400">{{ field.label }}<span v-if="field.required"> *</span></label>
-                <FaSelect v-model="actuatorForm.config[field.key]" :options="field.options ?? []" class="w-full" />
-              </div>
-              <div v-else class="flex flex-col gap-1">
-                <label class="text-sm text-gray-400">{{ field.label }}<span v-if="field.required"> *</span></label>
-                <FaInput v-model="actuatorForm.config[field.key]" type="number" :placeholder="field.hint ?? '默认值'">
-                  <template v-if="field.unit" #end>
-                    <span class="text-xs text-gray-400">{{ field.unit }}</span>
-                  </template>
-                </FaInput>
-              </div>
-            </template>
-          </div>
-          <span class="text-xs text-gray-400">必填项需填写；其余留空使用默认值（固件约定，见 docs/mqtt-api.md）</span>
-        </div>
-        <div class="flex gap-3 items-center">
-          <label class="text-sm font-medium">启用</label>
-          <FaSwitch v-model="actuatorForm.enabled" />
-        </div>
-      </div>
-    </FaModal>
+    <ActuatorEditDialog
+      v-model="showActuatorDialog"
+      :device-id="selectedDetail?.deviceId ?? ''"
+      :mode="actuatorDialogMode"
+      :actuator="editingActuator"
+      @saved="onActuatorSaved"
+    />
   </FaPageMain>
 </template>

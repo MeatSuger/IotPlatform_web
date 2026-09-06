@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { TableColumn } from '@fantastic-admin/components'
+import type { DescriptionItem, TableColumn } from '@fantastic-admin/components'
 import type { Actuator } from '@/api/modules/iot/actuator'
 import type { DeviceDetail } from '@/api/modules/iot/control'
 import type { Sensor } from '@/api/modules/iot/sensor'
@@ -127,6 +127,33 @@ function openDeviceLog() {
   }
 }
 
+// 设备信息展示项（FaDescriptions，条件字段按存在性展开）
+const deviceDescriptionItems = computed<DescriptionItem[]>(() => {
+  const d = selectedDetail.value
+  if (!d) {
+    return []
+  }
+  const items: DescriptionItem[] = [
+    { key: 'deviceId', label: '设备ID', value: d.deviceId },
+    { key: 'deviceType', label: '设备类型', value: d.deviceType },
+    { key: 'status', label: '状态', value: d.status === 'ONLINE' ? '在线' : '离线' },
+    { key: 'lastActive', label: '最后活跃', value: formatTime(d.lastActiveTime) },
+  ]
+  if (d.ipAddress) {
+    items.push({ key: 'ip', label: 'IP', value: d.ipAddress })
+  }
+  if (d.macAddress) {
+    items.push({ key: 'mac', label: 'MAC', value: d.macAddress })
+  }
+  if (d.firmwareVersion) {
+    items.push({ key: 'firmware', label: '固件', value: d.firmwareVersion })
+  }
+  if (d.location) {
+    items.push({ key: 'location', label: '位置', value: d.location })
+  }
+  return items
+})
+
 // ==================== 传感器物模型 + 数值展示（详情接口即数据源：sensors = 定义 + latest） ====================
 export interface DisplaySensor extends Sensor {
   // 最近一次上报值（详情 latest.value；null = 从未上报）
@@ -182,6 +209,18 @@ function openEditSensorDialog(sensor: DisplaySensor) {
   sensorDialogMode.value = 'edit'
   editingSensor.value = sensor
   showSensorDialog.value = true
+}
+
+// 「显示」→ 跳转数据监控页并聚焦该传感器（keyword = 传感器 id，监控页按 id/类型过滤 + 轮询）
+function goSensorMonitor(sensor: DisplaySensor) {
+  const deviceId = selectedDetail.value?.deviceId
+  if (!deviceId) {
+    return
+  }
+  router.push({
+    name: 'MonitorIndex',
+    query: { deviceId, keyword: sensor.id },
+  })
 }
 
 function onSensorSaved() {
@@ -643,24 +682,9 @@ onBeforeUnmount(() => {
       <div class="flex flex-1 flex-col gap-3 min-h-0">
         <!-- 设备信息 -->
         <FaCard title="设备信息" class="shrink-0">
-          <div v-if="selectedDetail" class="text-sm gap-3 grid grid-cols-2 md:grid-cols-4">
-            <div><span class="text-gray-500">设备ID：</span>{{ selectedDetail.deviceId }}</div>
-            <div><span class="text-gray-500">设备类型：</span>{{ selectedDetail.deviceType }}</div>
-            <div><span class="text-gray-500">状态：</span>{{ selectedDetail.status === 'ONLINE' ? '在线' : '离线' }}</div>
-            <div><span class="text-gray-500">最后活跃：</span>{{ formatTime(selectedDetail.lastActiveTime) }}</div>
-            <div v-if="selectedDetail.ipAddress">
-              <span class="text-gray-500">IP：</span>{{ selectedDetail.ipAddress }}
-            </div>
-            <div v-if="selectedDetail.macAddress">
-              <span class="text-gray-500">MAC：</span>{{ selectedDetail.macAddress }}
-            </div>
-            <div v-if="selectedDetail.firmwareVersion">
-              <span class="text-gray-500">固件：</span>{{ selectedDetail.firmwareVersion }}
-            </div>
-            <div v-if="selectedDetail.location">
-              <span class="text-gray-500">位置：</span>{{ selectedDetail.location }}
-            </div>
-            <div class="text-xs text-gray-400 col-span-2 md:col-span-4">
+          <div v-if="selectedDetail" class="flex flex-col gap-2">
+            <FaDescriptions :items="deviceDescriptionItems" :column="4" />
+            <div class="text-xs text-gray-400">
               创建于 {{ formatTime(selectedDetail.createdAt) }} · 更新于 {{ formatTime(selectedDetail.updatedAt) }}
             </div>
           </div>
@@ -738,6 +762,7 @@ onBeforeUnmount(() => {
                   <FaDropdown
                     :items="[
                       [
+                        { label: '显示', handle: () => goSensorMonitor(row.original) },
                         { label: '编辑', handle: () => openEditSensorDialog(row.original) },
                         { label: '删除', variant: 'destructive', handle: () => removeSensor(row.original) },
                       ],
@@ -773,6 +798,7 @@ onBeforeUnmount(() => {
                       <FaDropdown
                         :items="[
                           [
+                            { label: '显示', handle: () => goSensorMonitor(sensor) },
                             { label: '编辑', handle: () => openEditSensorDialog(sensor) },
                             { label: '删除', variant: 'destructive', handle: () => removeSensor(sensor) },
                           ],
@@ -916,7 +942,7 @@ onBeforeUnmount(() => {
                     </div>
                   </template>
 
-                  <!-- led_strip：开关 + 颜色（hex → rgb） -->
+                  <!-- led_strip：开关 + 颜色（调色盘 → rgb） -->
                   <template v-else-if="transportOf(act) === 'led_strip'">
                     <FaSwitch
                       :model-value="runtimeState(act).on" :disabled="actuatorCmdBusy === act.id"
@@ -924,12 +950,11 @@ onBeforeUnmount(() => {
                     />
                     <div class="flex gap-1.5 items-center">
                       <span class="text-xs text-gray-400 mr-1">颜色</span>
-                      <button
-                        v-for="color in LED_COLOR_PRESETS" :key="color" type="button"
-                        class="border rounded-full size-5 cursor-pointer transition-transform hover:scale-110"
-                        :class="runtimeState(act).colorHex === color ? 'ring-2 ring-primary ring-offset-1' : ''"
-                        :style="{ backgroundColor: color }"
-                        @click="onLedStripColor(act, color)"
+                      <el-color-picker
+                        v-model="runtimeState(act).colorHex"
+                        :disabled="actuatorCmdBusy === act.id"
+                        :predefine="LED_COLOR_PRESETS"
+                        @change="(color: string | null) => { if (color) onLedStripColor(act, color) }"
                       />
                     </div>
                   </template>

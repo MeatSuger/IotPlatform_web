@@ -166,13 +166,21 @@ function onPageSizeChange(size: number) {
   currentPage.value = 1
 }
 
-// ==================== 路由参数同步（从设备列表跳转） ====================
+// ==================== 路由参数同步（从设备列表/传感器「显示」跳转） ====================
 const route = useRoute()
 watch(() => route.query.deviceId, (val) => {
   const rid = typeof val === 'string' ? val : ''
   if (rid && rid !== query.deviceId) {
     query.deviceId = rid
     onQuery()
+  }
+}, { immediate: true })
+
+// 传感器「显示」带 keyword = 传感器 id 跳转：预填关键词，客户端过滤聚焦该传感器
+watch(() => route.query.keyword, (val) => {
+  const kw = typeof val === 'string' ? val : ''
+  if (kw) {
+    query.keyword = kw
   }
 }, { immediate: true })
 

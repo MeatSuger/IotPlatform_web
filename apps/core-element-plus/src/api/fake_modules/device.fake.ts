@@ -2,21 +2,36 @@ import type { ProcessedRequest } from 'vite-plugin-fake-server'
 import { faker } from '@faker-js/faker'
 import { defineFakeRoute } from 'vite-plugin-fake-server'
 
-// 上报值模板：type 为传感器定义标识（id），与 sensor.fake.ts 对齐
-const sensorsTemplates = [
-  { name: 'temperature', type: 'temperature', unit: '°C', min: 18, max: 35 },
-  { name: 'humidity', type: 'humidity', unit: '%RH', min: 30, max: 80 },
-  { name: 'illuminance', type: 'illuminance', unit: 'lux', min: 100, max: 5000 },
-  { name: 'pressure', type: 'pressure', unit: 'hPa', min: 990, max: 1030 },
-]
+import { getDeviceActuatorDefs } from './actuator.fake'
+// 详情接口物模型（1.7.0）：sensors = 定义 + latest；actuators = 定义（config.transport）
+// 定义与 CRUD 同源：引用 sensor.fake / actuator.fake 的单例存储（新增/编辑/删除后详情立即可见）
+import { getDeviceSensorDefs } from './sensor.fake'
 
-function generateSensors() {
-  const count = faker.number.int({ min: 1, max: 3 })
-  return faker.helpers.arrayElements(sensorsTemplates, count).map(t => ({
-    name: t.name,
-    type: t.type,
-    value: faker.number.float({ min: t.min, max: t.max, fractionDigits: 1 }),
-    timestamp: faker.date.recent({ days: 1 }).toISOString(),
+function sensorDetail(deviceId: string) {
+  return getDeviceSensorDefs(deviceId).map((d) => {
+    const specs = (d.specs ?? {}) as Record<string, number>
+    const min = typeof specs.min === 'number' ? specs.min : 0
+    const max = typeof specs.max === 'number' ? specs.max : 100
+    const noData = Math.random() < 0.15 // 部分传感器模拟从未上报
+    return {
+      ...d,
+      createdAt: d.createdAt ?? new Date().toISOString(),
+      updatedAt: d.updatedAt ?? new Date().toISOString(),
+      latest: noData
+        ? null
+        : {
+            value: faker.number.float({ min, max, fractionDigits: 1 }),
+            timestamp: faker.date.recent({ days: 1 }).toISOString(),
+          },
+    }
+  })
+}
+
+function actuatorDetail(deviceId: string) {
+  return getDeviceActuatorDefs(deviceId).map(a => ({
+    ...a,
+    createdAt: a.createdAt ?? new Date().toISOString(),
+    updatedAt: a.updatedAt ?? new Date().toISOString(),
   }))
 }
 
@@ -34,7 +49,8 @@ interface DeviceRecord {
   ipAddress: string
   macAddress: string
   location: string
-  sensors: ReturnType<typeof generateSensors>
+  sensors: ReturnType<typeof sensorDetail>
+  actuators: ReturnType<typeof actuatorDetail>
 }
 
 function createDevice(id: number): DeviceRecord {
@@ -42,9 +58,11 @@ function createDevice(id: number): DeviceRecord {
   const createdAt = faker.date.past({ years: 1 }).toISOString()
   const status: 'ONLINE' | 'OFFLINE' = faker.helpers.arrayElement(['ONLINE', 'ONLINE', 'ONLINE', 'OFFLINE'])
 
+  const deviceId = faker.string.alphanumeric({ length: 6, casing: 'lower' })
+
   return {
     id,
-    deviceId: faker.string.alphanumeric({ length: 6, casing: 'lower' }),
+    deviceId,
     deviceName: faker.helpers.arrayElement([
       'ESP32-devkit-c',
       'ESP32-sensor-A',
@@ -63,7 +81,8 @@ function createDevice(id: number): DeviceRecord {
     ipAddress: faker.internet.ipv4(),
     macAddress: faker.internet.mac(),
     location: faker.helpers.arrayElement(['', '机房A', '机房B', '实验室']),
-    sensors: generateSensors(),
+    sensors: sensorDetail(deviceId),
+    actuators: actuatorDetail(deviceId),
   }
 }
 
@@ -96,7 +115,7 @@ export default defineFakeRoute([
         code: 200,
         message: 'success',
         data: {
-          list: matched.slice(start, end).map(({ sensors: _, ...rest }) => rest),
+          list: matched.slice(start, end).map(({ sensors: _, actuators: __, ...rest }) => rest),
           total,
         },
       }
@@ -124,9 +143,10 @@ export default defineFakeRoute([
       const body = req.body
       const now = new Date().toISOString()
       const deviceToken = faker.string.uuid()
+      const deviceId = faker.string.alphanumeric({ length: 6, casing: 'lower' })
       const newDevice: DeviceRecord = {
         id: deviceList.length + 1,
-        deviceId: faker.string.alphanumeric({ length: 6, casing: 'lower' }),
+        deviceId,
         deviceName: body.deviceName || '新设备',
         deviceType: body.deviceType || 'temperature',
         status: 'ONLINE',
@@ -138,7 +158,8 @@ export default defineFakeRoute([
         ipAddress: body.ipAddress || faker.internet.ipv4(),
         macAddress: body.macAddress || faker.internet.mac(),
         location: body.location || '',
-        sensors: generateSensors(),
+        sensors: sensorDetail(deviceId),
+        actuators: actuatorDetail(deviceId),
       }
       deviceList.push(newDevice)
       deviceDetailMap.set(newDevice.id, newDevice)

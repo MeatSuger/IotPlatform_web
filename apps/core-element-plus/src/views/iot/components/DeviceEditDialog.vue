@@ -250,14 +250,25 @@ watch(
 )
 
 // ==================== 提交 ====================
-async function onConfirm() {
-  formRef.value?.submit()
+// 弹窗关闭守卫：先 vee 校验，再提交；成功才关闭（避免 FaModal 先销毁表单导致提交静默失败）
+async function handleBeforeClose(action: 'confirm' | 'cancel' | 'close', done: () => void) {
+  if (action !== 'confirm') {
+    done()
+    return
+  }
+  const result = await formRef.value?.validate()
+  if (result && !result.valid) {
+    return
+  }
+  if (await onSubmit()) {
+    done()
+  }
 }
 
-async function onSubmit() {
+async function onSubmit(): Promise<boolean> {
   const deviceId = model.value.deviceId
   if (!deviceId) {
-    return
+    return false
   }
   saving.value = true
   try {
@@ -276,11 +287,12 @@ async function onSubmit() {
       await controlApi.setConfig(deviceId, buildConfigPayload())
       useFaToast().success('高级配置已保存并下发')
     }
-    show.value = false
     emit('saved')
+    return true
   }
   catch {
     useFaToast().error('保存失败')
+    return false
   }
   finally {
     saving.value = false
@@ -291,7 +303,7 @@ async function onSubmit() {
 <template>
   <FaModal
     v-model="show" title="编辑设备" show-cancel-button
-    :confirm-button-loading="saving" @confirm="onConfirm"
+    :confirm-button-loading="saving" :before-close="handleBeforeClose" @confirm="show = false"
   >
     <div v-loading="loading" class="py-2 flex flex-col gap-4 min-w-0">
       <div class="text-xs text-gray-400">

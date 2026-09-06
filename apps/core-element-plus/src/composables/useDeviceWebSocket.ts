@@ -1,14 +1,12 @@
 import { useAppAccountStore } from '@/store/modules/app/account'
 
-export interface WsControlPayload {
-  GPIO: string
-  action: 'on' | 'off' | 'toggle'
-}
-
+// 用户通道下行命令消息（与 HTTP POST /devices/{deviceId}/commands 一致，仅多 deviceId）
+// 执行器控制载荷：{ action: <执行器 id>, value: <驱动参数> }（见固件 docs/mqtt-api.md）；
+// 兼容遗留 GPIO 直控：{ GPIO: "48", action: "on" | "off" | "toggle" | "pwm", value? }
 export interface WsControlMessage {
   deviceId: string
   type: 'control'
-  payload: WsControlPayload
+  payload: Record<string, any>
 }
 
 export interface WsResponseMessage {

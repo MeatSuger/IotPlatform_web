@@ -66,7 +66,8 @@ const deviceSensorMap = new Map<string, SensorRecord[]>()
 // 每台设备已下发的 config 版本号
 const deviceConfigVersionMap = new Map<string, number>()
 
-function getSensors(deviceId: string): SensorRecord[] {
+// 导出单例存储：device.fake.ts 的详情接口（sensors = 定义 + latest）与 CRUD 同源
+export function getDeviceSensorDefs(deviceId: string): SensorRecord[] {
   if (!deviceSensorMap.has(deviceId)) {
     deviceSensorMap.set(deviceId, sensorTemplates.map(t => ({ ...t })))
   }
@@ -82,7 +83,7 @@ export default defineFakeRoute([
       return {
         code: 200,
         message: 'success',
-        data: getSensors(req.params.deviceId as string).map(item => ({
+        data: getDeviceSensorDefs(req.params.deviceId as string).map(item => ({
           ...item,
           createdAt: item.createdAt ?? new Date().toISOString(),
           updatedAt: item.updatedAt ?? new Date().toISOString(),
@@ -96,7 +97,7 @@ export default defineFakeRoute([
     url: '/devices/:deviceId/sensors/:sensorId',
     method: 'GET',
     response: (req: ProcessedRequest) => {
-      const item = getSensors(req.params.deviceId as string).find(s => s.id === req.params.sensorId)
+      const item = getDeviceSensorDefs(req.params.deviceId as string).find(s => s.id === req.params.sensorId)
       if (!item) {
         return { code: 404, message: '传感器不存在', data: null }
       }
@@ -113,13 +114,13 @@ export default defineFakeRoute([
     url: '/devices/:deviceId/sensors',
     method: 'POST',
     response: (req: ProcessedRequest) => {
-      const list = getSensors(req.params.deviceId as string)
+      const list = getDeviceSensorDefs(req.params.deviceId as string)
       const body = (req.body || {}) as Partial<SensorRecord>
       if (!body.id || !body.name || !body.type) {
         return { code: 400, message: 'id、name、type 必填', data: null }
       }
-      if (!/^[a-z][a-z0-9_]{0,49}$/.test(body.id)) {
-        return { code: 400, message: 'id 需小写字母开头，仅含小写字母/数字/下划线，≤50', data: null }
+      if (!/^[a-z]\w{0,49}$/i.test(body.id)) {
+        return { code: 400, message: 'id 需字母开头，仅含字母/数字/下划线，≤50', data: null }
       }
       if (list.some(s => s.id === body.id)) {
         return { code: 400, message: '传感器标识已存在', data: null }
@@ -149,7 +150,7 @@ export default defineFakeRoute([
     url: '/devices/:deviceId/sensors/:sensorId/update',
     method: 'POST',
     response: (req: ProcessedRequest) => {
-      const list = getSensors(req.params.deviceId as string)
+      const list = getDeviceSensorDefs(req.params.deviceId as string)
       const idx = list.findIndex(s => s.id === req.params.sensorId)
       if (idx < 0) {
         return { code: 404, message: '传感器不存在', data: null }
@@ -173,7 +174,7 @@ export default defineFakeRoute([
     url: '/devices/:deviceId/sensors/:sensorId/delete',
     method: 'POST',
     response: (req: ProcessedRequest) => {
-      const list = getSensors(req.params.deviceId as string)
+      const list = getDeviceSensorDefs(req.params.deviceId as string)
       const idx = list.findIndex(s => s.id === req.params.sensorId)
       if (idx < 0) {
         return { code: 404, message: '传感器不存在', data: null }
@@ -188,7 +189,7 @@ export default defineFakeRoute([
     url: '/devices/:deviceId/sensors/apply',
     method: 'POST',
     response: (req: ProcessedRequest) => {
-      const list = getSensors(req.params.deviceId as string)
+      const list = getDeviceSensorDefs(req.params.deviceId as string)
       const version = (deviceConfigVersionMap.get(req.params.deviceId as string) ?? 0) + 1
       deviceConfigVersionMap.set(req.params.deviceId as string, version)
       return {

@@ -1,15 +1,18 @@
+import type { Actuator } from './actuator'
+import type { Sensor } from './sensor'
 import api from '../../index'
 
-// ==================== 传感器上报值（设备详情 sensors，API.md 4.3 SensorData） ====================
-export interface SensorItem {
-  name: string
-  // 上报的传感器标识（对应 Sensor 定义的 id / ApiTag）
-  type: string
-  value: number | string | boolean
-  timestamp?: string
+// ==================== 设备详情（真实 API: GET /api/devices/{deviceId}） ====================
+// 1.7.0 起详情即物模型视图（服务端完成 join）：
+//   - sensors:   传感器物模型数组 = 定义字段 + latest（最近一次上报值，null = 从未上报）
+//   - actuators: 执行器物模型数组（= 定义，含 config.transport）
+// 设备无定义时两数组均为 []（非 null）。
+
+// 传感器定义 + 最近一次上报值
+interface DetailSensor extends Sensor {
+  latest: { value: number | string | boolean | null, timestamp?: string } | null
 }
 
-// ==================== 设备详情（真实 API: GET /api/devices/{deviceId}） ====================
 export interface DeviceDetail {
   deviceId: string
   deviceName: string
@@ -23,7 +26,8 @@ export interface DeviceDetail {
   ipAddress: string
   macAddress: string
   location: string
-  sensors: SensorItem[] | null
+  sensors: DetailSensor[] | null
+  actuators: Actuator[] | null
 }
 
 // ==================== 下行命令（DownlinkCmd） ====================

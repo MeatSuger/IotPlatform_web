@@ -107,9 +107,6 @@ declare global {
   export type { Component, Slot, Slots, ComponentPublicInstance, ComputedRef, DirectiveBinding, ExtractDefaultPropTypes, ExtractPropTypes, ExtractPublicPropTypes, InjectionKey, PropType, Ref, ShallowRef, MaybeRef, MaybeRefOrGetter, VNode, WritableComputedRef } from 'vue'
   import('vue')
   // @ts-ignore
-  export type { ControllerType, ControllerItem } from '../store/modules/controller'
-  import('../store/modules/controller')
-  // @ts-ignore
-  export type { WsControlPayload, WsControlMessage, WsResponseMessage } from '../composables/useDeviceWebSocket'
+  export type { WsControlMessage, WsResponseMessage } from '../composables/useDeviceWebSocket'
   import('../composables/useDeviceWebSocket')
 }

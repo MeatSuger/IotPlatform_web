@@ -15,7 +15,7 @@ export interface SensorThresholds {
 }
 
 export interface Sensor {
-  // 标识符：小写字母开头，仅含小写字母/数字/下划线，≤50（创建必填、不可变）
+  // 标识符：字母开头，仅含字母/数字/下划线，≤50（创建必填、不可变）
   id: string
   name: string
   // 类别：temperature / humidity / light / switch / custom

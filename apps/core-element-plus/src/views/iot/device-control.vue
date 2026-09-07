@@ -10,6 +10,7 @@ import { sensorApi } from '@/api/modules/iot/sensor'
 import { useDeviceWebSocket } from '@/composables/useDeviceWebSocket'
 import ActuatorEditDialog from './components/ActuatorEditDialog.vue'
 import DeviceEditDialog from './components/DeviceEditDialog.vue'
+import LedStripPicker from './components/LedStripPicker.vue'
 import SensorEditDialog from './components/SensorEditDialog.vue'
 
 defineOptions({ name: 'DeviceControl' })
@@ -408,6 +409,11 @@ function onLedStripColor(act: Actuator, color: string) {
   st.colorHex = color
   st.on = true
   sendActuatorControl(act, hexToRgbPrimitive(color))
+}
+
+// led_strip：调色板内选择颜色（仅更新选择态，不发送；点「应用颜色」或上电时下发）
+function onLedStripSelect(act: Actuator, hex: string) {
+  runtimeState(act).colorHex = hex
 }
 
 // 执行器真实类型 = config.transport（driver 仅为后端兼容标识）
@@ -942,21 +948,16 @@ onBeforeUnmount(() => {
                     </div>
                   </template>
 
-                  <!-- led_strip：开关 + 颜色（调色盘 → rgb） -->
+                  <!-- led_strip：调色板卡片（色域画布 + HSL 滑块 + 预设 + 应用/随机/重置/复制） -->
                   <template v-else-if="transportOf(act) === 'led_strip'">
-                    <FaSwitch
-                      :model-value="runtimeState(act).on" :disabled="actuatorCmdBusy === act.id"
-                      @update:model-value="(val?: boolean) => onLedStripToggle(act, val)"
+                    <LedStripPicker
+                      :model-value="runtimeState(act).colorHex"
+                      :on="runtimeState(act).on"
+                      :disabled="actuatorCmdBusy === act.id"
+                      @update:model-value="(hex: string) => onLedStripSelect(act, hex)"
+                      @apply="(hex: string) => onLedStripColor(act, hex)"
+                      @toggle="(val: boolean) => onLedStripToggle(act, val)"
                     />
-                    <div class="flex gap-1.5 items-center">
-                      <span class="text-xs text-gray-400 mr-1">颜色</span>
-                      <el-color-picker
-                        v-model="runtimeState(act).colorHex"
-                        :disabled="actuatorCmdBusy === act.id"
-                        :predefine="LED_COLOR_PRESETS"
-                        @change="(color: string | null) => { if (color) onLedStripColor(act, color) }"
-                      />
-                    </div>
                   </template>
 
                   <!-- 旧版/未知 transport：提示编辑升级 -->

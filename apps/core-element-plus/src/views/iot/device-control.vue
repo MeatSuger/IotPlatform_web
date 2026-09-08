@@ -315,6 +315,7 @@ function runtimeState(act: Actuator): Record<string, any> {
     colorHex: LED_COLOR_PRESETS[0],
     txText: '',
     txArray: '',
+    pickerOpen: false,
   })
 }
 
@@ -689,7 +690,7 @@ onBeforeUnmount(() => {
         <!-- 设备信息 -->
         <FaCard title="设备信息" class="shrink-0">
           <div v-if="selectedDetail" class="flex flex-col gap-2">
-            <FaDescriptions :items="deviceDescriptionItems" :column="4" />
+            <FaDescriptions :items="deviceDescriptionItems" :column="4" border />
             <div class="text-xs text-gray-400">
               创建于 {{ formatTime(selectedDetail.createdAt) }} · 更新于 {{ formatTime(selectedDetail.updatedAt) }}
             </div>
@@ -948,16 +949,38 @@ onBeforeUnmount(() => {
                     </div>
                   </template>
 
-                  <!-- led_strip：调色板卡片（色域画布 + HSL 滑块 + 预设 + 应用/随机/重置/复制） -->
+                  <!-- led_strip：基础项（颜色色块 + 开关），点击颜色弹出高级调色板（FaPopover） -->
                   <template v-else-if="transportOf(act) === 'led_strip'">
-                    <LedStripPicker
-                      :model-value="runtimeState(act).colorHex"
-                      :on="runtimeState(act).on"
-                      :disabled="actuatorCmdBusy === act.id"
-                      @update:model-value="(hex: string) => onLedStripSelect(act, hex)"
-                      @apply="(hex: string) => onLedStripColor(act, hex)"
-                      @toggle="(val: boolean) => onLedStripToggle(act, val)"
-                    />
+                    <div class="flex gap-2 items-center">
+                      <FaPopover v-model="runtimeState(act).pickerOpen" align="start" class="p-0 w-[360px]" side-offset="4">
+                        <button
+                          class="border border-black/10 rounded-md shrink-0 size-8 cursor-pointer shadow-sm transition-transform dark:border-white/10 disabled:opacity-60 disabled:cursor-not-allowed hover:scale-105"
+                          :style="{ backgroundColor: runtimeState(act).colorHex }"
+                          :disabled="actuatorCmdBusy === act.id"
+                          title="点击打开调色板"
+                          aria-label="打开调色板"
+                        />
+                        <template #panel>
+                          <LedStripPicker
+                            :model-value="runtimeState(act).colorHex"
+                            :on="runtimeState(act).on"
+                            :disabled="actuatorCmdBusy === act.id"
+                            @update:model-value="(hex: string) => onLedStripSelect(act, hex)"
+                            @apply="(hex: string) => onLedStripColor(act, hex)"
+                          />
+                        </template>
+                      </FaPopover>
+                      <FaTag variant="secondary" class="font-mono">
+                        {{ runtimeState(act).colorHex }}
+                      </FaTag>
+                      <FaSwitch
+                        :model-value="runtimeState(act).on"
+                        :disabled="actuatorCmdBusy === act.id"
+                        on-icon="i-ri:flashlight-fill"
+                        off-icon="i-ri:flashlight-line"
+                        @update:model-value="(val?: boolean) => onLedStripToggle(act, val)"
+                      />
+                    </div>
                   </template>
 
                   <!-- 旧版/未知 transport：提示编辑升级 -->

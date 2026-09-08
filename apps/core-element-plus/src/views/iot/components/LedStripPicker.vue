@@ -17,7 +17,6 @@ const props = withDefaults(
 const emit = defineEmits<{
   'update:modelValue': [hex: string]
   'apply': [hex: string]
-  'toggle': [on: boolean]
 }>()
 
 // 默认 / 重置颜色（与父级 LED_COLOR_PRESETS[0] 保持一致）
@@ -317,17 +316,78 @@ function onHuePointerUp() {
   hueDragging = false
 }
 
-// ==================== HSL 滑块 ====================
-function onHueSliderInput(e: Event) {
-  applyHSL(Number((e.target as HTMLInputElement).value))
+// ==================== HSL 滑块（FaSlider，值为 number[]） ====================
+function onHueSliderInput(val: number[] | undefined) {
+  if (val && val[0] != null) {
+    applyHSL(val[0])
+  }
 }
 
-function onSatSliderInput(e: Event) {
-  applyHSL(undefined, Number((e.target as HTMLInputElement).value))
+function onSatSliderInput(val: number[] | undefined) {
+  if (val && val[0] != null) {
+    applyHSL(undefined, val[0])
+  }
 }
 
-function onLigSliderInput(e: Event) {
-  applyHSL(undefined, undefined, Number((e.target as HTMLInputElement).value))
+function onLigSliderInput(val: number[] | undefined) {
+  if (val && val[0] != null) {
+    applyHSL(undefined, undefined, val[0])
+  }
+}
+
+// ==================== 颜色输入（支持 HEX / RGB / HSL 三种格式，正则校验） ====================
+const HEX_RE = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i
+const RGB_RE = /^rgb\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*\)$/i
+const HSL_RE = /^hsl\(\s*(\d{1,3}(?:\.\d+)?)\s*,\s*(\d{1,3}(?:\.\d+)?)%\s*,\s*(\d{1,3}(?:\.\d+)?)%\s*\)$/i
+
+// 输入框与当前颜色同步（拖动/取色时回填 HEX），用户输入期间不打断
+const colorInput = ref(currentHex())
+
+watch([h, s, l], () => {
+  colorInput.value = currentHex()
+})
+
+function onColorInputApply() {
+  const t = colorInput.value.trim()
+  if (!t) {
+    useFaToast().warning('请输入颜色')
+    return
+  }
+  // HEX：#fff 或 #ffffff
+  if (HEX_RE.test(t)) {
+    const [r, g, b] = hexToRgb(t)
+    const [hh, ss, ll] = rgbToHsl(r, g, b)
+    applyHSL(hh, ss, ll)
+    return
+  }
+  // RGB：rgb(r,g,b)
+  const rgbM = t.match(RGB_RE)
+  if (rgbM) {
+    const r = Number(rgbM[1])
+    const g = Number(rgbM[2])
+    const b = Number(rgbM[3])
+    if (r > 255 || g > 255 || b > 255) {
+      useFaToast().warning('RGB 各通道需在 0-255 之间')
+      return
+    }
+    const [hh, ss, ll] = rgbToHsl(r, g, b)
+    applyHSL(hh, ss, ll)
+    return
+  }
+  // HSL：hsl(h,s%,l%)
+  const hslM = t.match(HSL_RE)
+  if (hslM) {
+    const hh = Number(hslM[1])
+    const ss = Number(hslM[2])
+    const ll = Number(hslM[3])
+    if (hh > 360 || ss > 100 || ll > 100) {
+      useFaToast().warning('HSL 越界：H≤360，S/L≤100')
+      return
+    }
+    applyHSL(hh, ss, ll)
+    return
+  }
+  useFaToast().warning('不支持的格式，请输入 #RRGGBB、rgb(r,g,b) 或 hsl(h,s%,l%)')
 }
 
 // ==================== 预设 / 操作按钮 ====================
@@ -349,10 +409,6 @@ function onRandom() {
 function onReset() {
   const [hh, ss, ll] = hexToHsl(DEFAULT_HEX)
   applyHSL(hh, ss, ll)
-}
-
-function onToggle(val?: boolean) {
-  emit('toggle', val === true)
 }
 
 // ==================== 复制 ====================
@@ -431,7 +487,7 @@ onMounted(() => {
 
 <template>
   <div class="led-picker">
-    <!-- 头部：标题 + 电源开关 -->
+    <!-- 头部：标题 + 状态（电源开关在基础项中，不在此卡片内） -->
     <div class="header">
       <div class="title">
         <FaIcon name="i-ri:lightbulb-line" class="size-4" />
@@ -440,13 +496,6 @@ onMounted(() => {
           {{ on ? '已点亮' : '已熄灭' }}
         </FaTag>
       </div>
-      <FaSwitch
-        :model-value="on"
-        :disabled="disabled"
-        on-icon="i-ri:flashlight-fill"
-        off-icon="i-ri:flashlight-line"
-        @update:model-value="onToggle"
-      />
     </div>
 
     <!-- 色板 + 预览/滑块 并排 -->
@@ -491,33 +540,51 @@ onMounted(() => {
           </div>
         </div>
 
-        <!-- HSL 滑块 -->
+        <!-- 颜色输入：支持 HEX / RGB / HSL 三种格式（正则校验） -->
+        <div class="input-row">
+          <FaInput
+            v-model="colorInput"
+            class="flex-1"
+            input-class="font-mono"
+            placeholder="#RRGGBB / rgb() / hsl()"
+            :disabled="disabled"
+            @keyup.enter="onColorInputApply"
+          />
+          <FaButton size="sm" variant="outline" :disabled="disabled" @click="onColorInputApply">
+            应用
+          </FaButton>
+        </div>
+
+        <!-- HSL 滑块（FaSlider，渐变轨道由 --track 变量注入） -->
         <div class="slider-group">
           <div class="slider-item">
             <span class="label">H</span>
-            <input
-              type="range" min="0" max="360" step="1"
-              :value="Math.round(h)" :style="hueTrackStyle" :disabled="disabled"
-              @input="onHueSliderInput"
-            >
+            <FaSlider
+              :model-value="[Math.round(h)]" :min="0" :max="360" :step="1"
+              :style="hueTrackStyle" :disabled="disabled" :tooltip="false"
+              class="hsl-slider flex-1"
+              @update:model-value="onHueSliderInput"
+            />
             <span class="value">{{ Math.round(h) }}°</span>
           </div>
           <div class="slider-item">
             <span class="label">S</span>
-            <input
-              type="range" min="0" max="100" step="1"
-              :value="Math.round(s)" :style="satTrackStyle" :disabled="disabled"
-              @input="onSatSliderInput"
-            >
+            <FaSlider
+              :model-value="[Math.round(s)]" :min="0" :max="100" :step="1"
+              :style="satTrackStyle" :disabled="disabled" :tooltip="false"
+              class="hsl-slider flex-1"
+              @update:model-value="onSatSliderInput"
+            />
             <span class="value">{{ Math.round(s) }}%</span>
           </div>
           <div class="slider-item">
             <span class="label">L</span>
-            <input
-              type="range" min="0" max="100" step="1"
-              :value="Math.round(l)" :style="ligTrackStyle" :disabled="disabled"
-              @input="onLigSliderInput"
-            >
+            <FaSlider
+              :model-value="[Math.round(l)]" :min="0" :max="100" :step="1"
+              :style="ligTrackStyle" :disabled="disabled" :tooltip="false"
+              class="hsl-slider flex-1"
+              @update:model-value="onLigSliderInput"
+            />
             <span class="value">{{ Math.round(l) }}%</span>
           </div>
         </div>
@@ -574,7 +641,12 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 10px;
+
+  /* 高级选项卡片：弹出面板内自适应宽度（宽度由 FaPopover 面板控制） */
+  width: 100%;
+  max-width: 420px;
   padding: 10px;
+  margin-inline: auto;
   user-select: none;
   background: var(--el-bg-color);
   border: 1px solid var(--el-border-color);
@@ -617,6 +689,13 @@ onMounted(() => {
   :deep(.fa-icon) {
     color: var(--el-color-primary);
   }
+}
+
+/* ===== 颜色输入 ===== */
+.input-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
 }
 
 /* ===== 预览 & 数值 ===== */
@@ -785,45 +864,20 @@ onMounted(() => {
     text-align: right;
   }
 
-  input[type="range"] {
+  .hsl-slider {
     flex: 1;
-    height: 5px;
-    margin: 0;
-    appearance: none;
-    outline: none;
-    background: var(--track, var(--el-fill-color));
-    border-radius: 5px;
-    transition: background 0.2s;
-  }
+    min-width: 0;
 
-  input[type="range"]:disabled {
-    opacity: 0.5;
-  }
-
-  input[type="range"]::-webkit-slider-thumb {
-    width: 14px;
-    height: 14px;
-    appearance: none;
-    cursor: pointer;
-    background: #fff;
-    border: 2px solid var(--el-color-primary);
-    border-radius: 50%;
-    box-shadow: 0 1px 4px rgb(0 0 0 / 20%);
-    transition: transform 0.2s;
-
-    &:hover {
-      transform: scale(1.12);
+    :deep([data-slot="slider-track"]) {
+      height: 5px;
+      background-color: var(--el-fill-color);
+      background-image: var(--track);
+      border-radius: 5px;
     }
-  }
 
-  input[type="range"]::-moz-range-thumb {
-    width: 12px;
-    height: 12px;
-    cursor: pointer;
-    background: #fff;
-    border: 2px solid var(--el-color-primary);
-    border-radius: 50%;
-    box-shadow: 0 1px 4px rgb(0 0 0 / 20%);
+    :deep([data-slot="slider-range"]) {
+      background: transparent;
+    }
   }
 }
 

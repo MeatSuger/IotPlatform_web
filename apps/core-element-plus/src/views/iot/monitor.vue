@@ -75,8 +75,8 @@ const filteredData = computed(() => {
     const s = +range[0]
     const e = +range[1]
     list = list.filter((d: any) => {
-      const t = Date.parse(d.timestamp ?? d.time ?? d.date ?? '')
-      return !Number.isNaN(t) && t >= s && t <= e
+      const t = parseDateSafe(d.timestamp ?? d.time ?? d.date ?? '')
+      return t !== 0 && t >= s && t <= e
     })
   }
   return list
@@ -95,19 +95,51 @@ const typeMap: Record<string, string> = {
   pressure: '气压',
 }
 
+// ==================== 时间解析（后端存 UTC，浏览器本地显示） ====================
+// 后端 InfluxDB 查询返回的是无时区标识的 UTC 墙钟时间（如 2025-06-15T04:30:00.000），
+// JS Date.parse 会把无时区字符串按“本地时间”解析，导致显示偏移 —— 需补 Z 按 UTC 解析；
+// Redis 传感器缓存返回已带时区偏移（如 2025-06-15T12:30:00.000+08:00），原样解析。
+function parseBackendTime(val: any): Date | null {
+  if (val === null || val === undefined || val === '') {
+    return null
+  }
+  if (typeof val === 'number') {
+    const d = new Date(val)
+    return Number.isNaN(d.getTime()) ? null : d
+  }
+  let str = String(val).trim()
+  // 已带时区指示符（Z 结尾或 ±HH:MM 偏移）的不再追加，避免双重时区；否则视为 UTC 墙钟时间补 Z
+  if (!/(?:Z|[+-]\d{2}:?\d{2})$/i.test(str)) {
+    str += 'Z'
+  }
+  const t = Date.parse(str)
+  return Number.isNaN(t) ? null : new Date(t)
+}
+
+// 浏览器本地时区信息（页面提示“当前时间为当地时间”，仅显示 UTC 偏移，不含地区名）
+const tzInfo = (() => {
+  const offMin = -new Date().getTimezoneOffset()
+  const sign = offMin >= 0 ? '+' : '-'
+  const abs = Math.abs(offMin)
+  const hh = Math.floor(abs / 60)
+  const mm = abs % 60
+  const suffix = mm === 0 ? '' : `:${String(mm).padStart(2, '0')}`
+  return { offset: `UTC${sign}${hh}${suffix}` }
+})()
+
 const columns: TableColumn<any>[] = [
-  { accessorKey: 'timestamp', header: '时间' },
+  { accessorKey: 'timestamp', header: '时间（当地时间）' },
   { accessorKey: 'name', header: '名称' },
   { accessorKey: 'type', header: '类型', align: 'center' },
   { accessorKey: 'value', header: '数值', align: 'center' },
 ]
 
 function formatTime(val: any): string {
-  if (!val) {
+  if (val === null || val === undefined || val === '') {
     return '-'
   }
-  const d = new Date(val)
-  if (Number.isNaN(d.getTime())) {
+  const d = parseBackendTime(val)
+  if (!d) {
     return String(val)
   }
   return d.toLocaleString()
@@ -230,8 +262,8 @@ function toNumber(v: unknown): number {
   return Number.isNaN(num) ? 0 : num
 }
 function parseDateSafe(s: string) {
-  const t = Date.parse(s)
-  return Number.isNaN(t) ? 0 : t
+  const d = parseBackendTime(s)
+  return d ? d.getTime() : 0
 }
 
 const timeAxis = computed(() => {
@@ -260,7 +292,23 @@ const chartOption = computed(() => {
         type: 'cross',
         label: {
           backgroundColor: '#6a7985',
+          formatter: (params: any) => {
+            const d = parseBackendTime(params?.value)
+            return d ? d.toLocaleString() : String(params?.value ?? '')
+          },
         },
+      },
+      // 时间按浏览器本地时区展示（后端存 UTC）
+      formatter: (params: any) => {
+        const list = Array.isArray(params) ? params : [params]
+        const first = list[0]
+        const d = parseBackendTime(first?.axisValue ?? first?.name)
+        const header = d ? d.toLocaleString() : String(first?.axisValue ?? '')
+        const rows = list
+          .filter((p: any) => p?.value != null)
+          .map((p: any) => `${p.marker ?? ''} ${typeMap[p.seriesName] || p.seriesName}：${p.value}`)
+          .join('<br/>')
+        return `<div style="font-weight: 600">${header}</div>${rows ? `<br/>${rows}` : ''}`
       },
     },
     legend: {
@@ -289,7 +337,15 @@ const chartOption = computed(() => {
       boundaryGap: false,
       data: xData,
       axisLabel: {
-        formatter: (v: string) => String(v).slice(11, 16),
+        // 后端为 UTC，这里转成本地时区 HH:MM 显示
+        formatter: (v: string) => {
+          const d = parseBackendTime(v)
+          if (!d) {
+            return String(v).slice(11, 16)
+          }
+          const pad = (n: number) => String(n).padStart(2, '0')
+          return `${pad(d.getHours())}:${pad(d.getMinutes())}`
+        },
       },
     },
     yAxis: {
@@ -421,7 +477,7 @@ watch(chartOption, (option) => {
           <div ref="chartEl" class="h-full w-full" />
         </div>
         <template #description>
-          <span class="text-xs text-gray-500">鼠标悬停图表可框选缩放，滚轮可缩放</span>
+          <span class="text-xs text-gray-500">鼠标悬停图表可框选缩放，滚轮可缩放 · 时间（{{ tzInfo.offset }}）</span>
         </template>
       </FaCard>
 
@@ -433,9 +489,14 @@ watch(chartOption, (option) => {
         <template #header>
           <div class="flex w-full items-center justify-between">
             <span>监测数据</span>
-            <span v-if="query.deviceId" class="text-sm text-gray-500">
-              设备：{{ query.deviceId }} · 共 {{ tableTotal }} 条
-            </span>
+            <div class="flex gap-3 items-center">
+              <span v-if="query.deviceId" class="text-sm text-gray-500">
+                设备：{{ query.deviceId }} · 共 {{ tableTotal }} 条
+              </span>
+              <span class="text-xs text-gray-500">
+                （{{ tzInfo.offset }}）
+              </span>
+            </div>
           </div>
         </template>
         <div class="table-wrapper flex-1 min-h-0 overflow-auto">

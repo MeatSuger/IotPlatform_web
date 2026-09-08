@@ -952,7 +952,7 @@ onBeforeUnmount(() => {
                   <!-- led_strip：基础项（颜色色块 + 开关），点击颜色弹出高级调色板（FaPopover） -->
                   <template v-else-if="transportOf(act) === 'led_strip'">
                     <div class="flex gap-2 items-center">
-                      <FaPopover v-model="runtimeState(act).pickerOpen" align="start" class="p-0 w-[360px]" side-offset="4">
+                      <FaPopover v-model="runtimeState(act).pickerOpen" align="start" class="p-0 w-[360px]" :side-offset="4">
                         <button
                           class="border border-black/10 rounded-md shrink-0 size-8 cursor-pointer shadow-sm transition-transform dark:border-white/10 disabled:opacity-60 disabled:cursor-not-allowed hover:scale-105"
                           :style="{ backgroundColor: runtimeState(act).colorHex }"

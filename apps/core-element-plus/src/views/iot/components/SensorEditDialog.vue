@@ -108,7 +108,7 @@ function prefill() {
     const s = props.sensor
     const specs = s.specs ?? {}
     // 后端统一：告警阈值与自由键均在 specs 内
-    const thresholds = (specs.thresholds ?? {}) as Record<string, unknown>
+    const thresholds = specs.thresholds
     const extraKeys = Object.entries(specs).filter(([k]) => !['min', 'max', 'step', 'values', 'maxLen', 'thresholds'].includes(k))
     form.id = s.id
     form.name = s.name
@@ -120,9 +120,9 @@ function prefill() {
     extra.specs.min = specs.min != null ? String(specs.min) : ''
     extra.specs.max = specs.max != null ? String(specs.max) : ''
     extra.specs.step = specs.step != null ? String(specs.step) : ''
-    extra.specThresholds.min = thresholds.min != null ? String(thresholds.min) : ''
-    extra.specThresholds.max = thresholds.max != null ? String(thresholds.max) : ''
-    extra.specThresholds.alarm = thresholds.alarm ?? false
+    extra.specThresholds.min = thresholds?.min != null ? String(thresholds.min) : ''
+    extra.specThresholds.max = thresholds?.max != null ? String(thresholds.max) : ''
+    extra.specThresholds.alarm = thresholds?.alarm ?? false
     extra.attrsRows = extraKeys.map(([key, value]) => ({ key, value: String(value) }))
   }
   else {

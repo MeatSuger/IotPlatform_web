@@ -417,14 +417,14 @@ function onLedStripSelect(act: Actuator, hex: string) {
   runtimeState(act).colorHex = hex
 }
 
-// 执行器真实类型 = config.transport（driver 仅为后端兼容标识）
+// 执行器真实类型 = specs.transport（driver 仅为后端兼容标识）
 function transportOf(act: Actuator): string {
-  const t = act.config?.transport
+  const t = act.specs?.transport
   return typeof t === 'string' ? t : ''
 }
 
 function actuatorConfigSummary(act: Actuator): string {
-  const cfg = act.config ?? {}
+  const cfg = act.specs ?? {}
   const transport = transportOf(act)
   if (transport === 'pwm') {
     return `pin ${cfg.pin ?? '-'} · ${cfg.freq_hz ?? 1000}Hz`
@@ -859,7 +859,7 @@ onBeforeUnmount(() => {
             </template>
             <div v-if="actuators.length === 0" class="text-gray-400 py-8 flex flex-col gap-1 items-center">
               <span>暂无执行器定义，点击「添加」创建</span>
-              <span class="text-xs">创建后点击「下发设备」编译下发，设备侧按 config.transport 实例化</span>
+              <span class="text-xs">创建后点击「下发设备」编译下发，设备侧按 specs.transport 实例化</span>
             </div>
             <div v-else class="flex flex-col gap-3">
               <div v-for="act in actuators" :key="act.id" class="p-3 border rounded-lg flex flex-col gap-2">
@@ -985,7 +985,7 @@ onBeforeUnmount(() => {
 
                   <!-- 旧版/未知 transport：提示编辑升级 -->
                   <div v-else class="text-xs text-amber-500">
-                    定义缺少 config.transport（旧版驱动模型），请编辑后保存并重新下发
+                    定义缺少 specs.transport（旧版驱动模型），请编辑后保存并重新下发
                   </div>
                 </template>
                 <div v-else class="text-xs text-gray-400">

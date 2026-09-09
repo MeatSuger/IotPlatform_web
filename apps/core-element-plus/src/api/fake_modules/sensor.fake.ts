@@ -7,10 +7,8 @@ interface SensorRecord {
   type: string
   dataType: string
   unit?: string
-  specs?: { min?: number, max?: number, step?: number }
+  specs?: Record<string, unknown>
   reportInterval?: number
-  thresholds?: { min?: number, max?: number, alarm?: boolean }
-  attrs?: Record<string, any>
   enabled?: boolean
   createdAt?: string
   updatedAt?: string
@@ -24,9 +22,8 @@ const sensorTemplates: SensorRecord[] = [
     type: 'temperature',
     dataType: 'float',
     unit: '°C',
-    specs: { min: -40, max: 125, step: 0.1 },
+    specs: { min: -40, max: 125, step: 0.1, thresholds: { min: 0, max: 100, alarm: true } },
     reportInterval: 60,
-    thresholds: { min: 0, max: 100, alarm: true },
     enabled: true,
   },
   {
@@ -132,10 +129,8 @@ export default defineFakeRoute([
         type: body.type,
         dataType: body.dataType || 'float',
         unit: body.unit || undefined,
-        specs: body.specs,
+        specs: body.specs as Record<string, unknown>,
         reportInterval: body.reportInterval,
-        thresholds: body.thresholds,
-        attrs: body.attrs,
         enabled: body.enabled ?? true,
         createdAt: now,
         updatedAt: now,

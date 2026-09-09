@@ -6,7 +6,7 @@ import api from '../../index'
 // id = 设备侧 periph 设备名 = 控制命令 action（≤11 字符）。
 
 // driver：后端兼容标识（后端枚举固定 led/servo/speaker，固件忽略此字段）。
-// 设备真实类型由 config.transport 决定（gpio/pwm/spi/led_strip），见固件 docs/mqtt-api.md。
+// 设备真实类型由 specs.transport 决定（gpio/pwm/spi/led_strip），见固件 docs/mqtt-api.md。
 export const actuatorDrivers = ['led', 'servo', 'speaker'] as const
 
 export type ActuatorDriver = (typeof actuatorDrivers)[number]
@@ -74,8 +74,9 @@ export interface Actuator {
   name: string
   // 兼容标识（后端枚举 led/servo/speaker，固件忽略）—— 创建时用户自选
   driver: ActuatorDriver
-  // 驱动参数；真实设备类型由 config.transport 表达（gpio/pwm/spi/led_strip）
-  config?: Record<string, any>
+  // 驱动参数 specs（后端 2026 命名统一：原 config 改名，与 Sensor 定义体同名）；
+  // 真实设备类型由 specs.transport 表达（gpio/pwm/spi/led_strip）
+  specs?: Record<string, any>
   // 是否启用（false = 期望设备卸载该执行器）
   enabled?: boolean
   createdAt?: string

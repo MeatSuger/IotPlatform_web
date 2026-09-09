@@ -83,9 +83,6 @@ const configForm = reactive({
   mqttPort: '1883',
   mqttTls: false,
   reportInterval: '60',
-  tempMin: '',
-  tempMax: '',
-  actuatorMode: 'auto',
   smtpHost: '',
   smtpPort: '465',
   smtpSsl: true,
@@ -93,11 +90,6 @@ const configForm = reactive({
   smtpPassword: '',
   snapshotInterval: '30',
 })
-
-const actuatorModeOptions = [
-  { label: '自动', value: 'auto' },
-  { label: '手动', value: 'manual' },
-]
 
 function toNum(value: string): number | undefined {
   const num = Number(value)
@@ -107,17 +99,14 @@ function toNum(value: string): number | undefined {
 function applyConfigPayload(payload: DeviceConfigPayload | null | undefined) {
   const network = payload?.network
   const sensor = payload?.sensor
-  const actuator = payload?.actuator
   const camera = payload?.camera
   configForm.wifiSsid = network?.wifi?.ssid ?? ''
   configForm.wifiPassword = network?.wifi?.password ?? ''
   configForm.mqttHost = network?.mqtt?.host ?? ''
   configForm.mqttPort = network?.mqtt?.port != null ? String(network.mqtt.port) : '1883'
   configForm.mqttTls = network?.mqtt?.tls ?? false
+  // 全局 sensor.thresholds 已删除（后端 2026 统一：告警阈值收敛到每传感器 specs.thresholds）
   configForm.reportInterval = sensor?.reportInterval != null ? String(sensor.reportInterval) : '60'
-  configForm.tempMin = sensor?.thresholds?.temperature?.min != null ? String(sensor.thresholds.temperature.min) : ''
-  configForm.tempMax = sensor?.thresholds?.temperature?.max != null ? String(sensor.thresholds.temperature.max) : ''
-  configForm.actuatorMode = actuator?.mode ?? 'auto'
   configForm.smtpHost = camera?.smtp?.host ?? ''
   configForm.smtpPort = camera?.smtp?.port != null ? String(camera.smtp.port) : '465'
   configForm.smtpSsl = camera?.smtp?.ssl ?? true
@@ -141,27 +130,11 @@ function buildConfigPayload(): DeviceConfigPayload {
   }
 
   const sensor: NonNullable<DeviceConfigPayload['sensor']> = {}
-  if (configForm.reportInterval !== '60' || configForm.tempMin || configForm.tempMax) {
-    if (configForm.reportInterval !== '60') {
-      sensor.reportInterval = toNum(configForm.reportInterval)
-    }
-    const temperature: { min?: number, max?: number } = {}
-    if (configForm.tempMin) {
-      temperature.min = toNum(configForm.tempMin)
-    }
-    if (configForm.tempMax) {
-      temperature.max = toNum(configForm.tempMax)
-    }
-    if (Object.keys(temperature).length) {
-      sensor.thresholds = { temperature }
-    }
+  if (configForm.reportInterval !== '60') {
+    sensor.reportInterval = toNum(configForm.reportInterval)
   }
   if (Object.keys(sensor).length) {
     payload.sensor = sensor
-  }
-
-  if (configForm.actuatorMode !== 'auto') {
-    payload.actuator = { mode: configForm.actuatorMode }
   }
 
   const camera: NonNullable<DeviceConfigPayload['camera']> = {}
@@ -375,30 +348,11 @@ async function onSubmit(): Promise<boolean> {
             <div class="text-sm text-muted-foreground font-semibold">
               传感器 (sensor)
             </div>
-            <div class="gap-3 grid grid-cols-1 min-w-0 sm:grid-cols-3">
-              <div class="flex flex-col gap-1">
-                <label class="text-sm font-medium">上报间隔 (s)</label>
-                <FaInput v-model="configForm.reportInterval" placeholder="60" class="w-full" />
-              </div>
-              <div class="flex flex-col gap-1">
-                <label class="text-sm font-medium">温度下限 (°C)</label>
-                <FaInput v-model="configForm.tempMin" placeholder="0" class="w-full" />
-              </div>
-              <div class="flex flex-col gap-1">
-                <label class="text-sm font-medium">温度上限 (°C)</label>
-                <FaInput v-model="configForm.tempMax" placeholder="100" class="w-full" />
-              </div>
+            <div class="flex flex-col gap-1 min-w-0 w-full sm:w-1/3">
+              <label class="text-sm font-medium">上报间隔 (s)</label>
+              <FaInput v-model="configForm.reportInterval" placeholder="60" class="w-full" />
             </div>
-          </div>
-
-          <div class="flex flex-col gap-2">
-            <div class="text-sm text-muted-foreground font-semibold">
-              执行器 (actuator)
-            </div>
-            <div class="flex flex-col gap-1 min-w-0 w-full sm:w-1/2">
-              <label class="text-sm font-medium">模式</label>
-              <FaSelect v-model="configForm.actuatorMode" :options="actuatorModeOptions" class="w-full" />
-            </div>
+            <span class="text-xs text-gray-400">告警阈值已收敛到每传感器物模型 specs.thresholds（编辑传感器定义处配置）；执行器定义经「下发设备」编译，此处不再单独维护</span>
           </div>
 
           <div class="flex flex-col gap-2">

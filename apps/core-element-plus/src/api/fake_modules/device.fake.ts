@@ -3,7 +3,7 @@ import { faker } from '@faker-js/faker'
 import { defineFakeRoute } from 'vite-plugin-fake-server'
 
 import { getDeviceActuatorDefs } from './actuator.fake'
-// 详情接口物模型（1.7.0）：sensors = 定义 + latest；actuators = 定义（config.transport）
+// 详情接口物模型（1.7.0）：sensors = 定义 + latest；actuators = 定义（specs.transport）
 // 定义与 CRUD 同源：引用 sensor.fake / actuator.fake 的单例存储（新增/编辑/删除后详情立即可见）
 import { getDeviceSensorDefs } from './sensor.fake'
 

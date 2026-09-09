@@ -2,16 +2,22 @@ import api from '../../index'
 
 // ==================== 传感器定义（物模型，后端 API.md 4.6） ====================
 // 与设备详情返回的传感器"数值"（sensors）分离：定义决定展示哪些传感器、如何采样/告警，数值由设备详情填充。
+// 统一物模型定义体（后端 2026：原 specs/thresholds/attrs 三对象并入一个 specs）
+// float/int 用 min/max/step；enum 用 values；text 用 maxLen；告警用 thresholds{alarm 等}；
+// 其余自由键平铺透传（原 attrs 能力）
 export interface SensorSpecs {
   min?: number
   max?: number
   step?: number
-}
-
-export interface SensorThresholds {
-  min?: number
-  max?: number
-  alarm?: boolean
+  values?: string[]
+  maxLen?: number
+  thresholds?: {
+    min?: number
+    max?: number
+    alarm?: boolean
+  }
+  // 自由扩展键（原 attrs）
+  [key: string]: unknown
 }
 
 export interface Sensor {
@@ -24,8 +30,6 @@ export interface Sensor {
   unit?: string
   specs?: SensorSpecs
   reportInterval?: number // 0 = 继承设备全局配置
-  thresholds?: SensorThresholds
-  attrs?: Record<string, any>
   enabled?: boolean
   createdAt?: string
   updatedAt?: string

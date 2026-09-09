@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { FormExpose } from '@fantastic-admin/components'
-import type { Sensor, SensorCreatePayload, SensorSpecs, SensorThresholds, SensorUpdatePayload } from '@/api/modules/iot/sensor'
+import type { Sensor, SensorCreatePayload, SensorSpecs, SensorUpdatePayload } from '@/api/modules/iot/sensor'
 import { toTypedSchema } from '@vee-validate/zod'
 import * as z from 'zod'
 import { sensorApi } from '@/api/modules/iot/sensor'
@@ -47,7 +47,9 @@ const extra = reactive({
   reportInterval: '60',
   enabled: true,
   specs: { min: '', max: '', step: '' },
-  thresholds: { min: '', max: '', alarm: false },
+  // 告警阈值（后端统一：并入 specs.thresholds，非顶层字段）
+  specThresholds: { min: '', max: '', alarm: false },
+  // 自由扩展键（后端统一：并入 specs 平铺，原 attrs 能力）
   attrsRows: [] as { key: string, value: string }[],
 })
 
@@ -95,9 +97,9 @@ function resetForm() {
   extra.specs.min = ''
   extra.specs.max = ''
   extra.specs.step = ''
-  extra.thresholds.min = ''
-  extra.thresholds.max = ''
-  extra.thresholds.alarm = false
+  extra.specThresholds.min = ''
+  extra.specThresholds.max = ''
+  extra.specThresholds.alarm = false
   extra.attrsRows = []
 }
 
@@ -105,8 +107,9 @@ function prefill() {
   if (props.mode === 'edit' && props.sensor) {
     const s = props.sensor
     const specs = s.specs ?? {}
-    const thresholds = s.thresholds ?? {}
-    const attrs = s.attrs ?? {}
+    // 后端统一：告警阈值与自由键均在 specs 内
+    const thresholds = (specs.thresholds ?? {}) as Record<string, unknown>
+    const extraKeys = Object.entries(specs).filter(([k]) => !['min', 'max', 'step', 'values', 'maxLen', 'thresholds'].includes(k))
     form.id = s.id
     form.name = s.name
     form.type = s.type || 'temperature'
@@ -117,10 +120,10 @@ function prefill() {
     extra.specs.min = specs.min != null ? String(specs.min) : ''
     extra.specs.max = specs.max != null ? String(specs.max) : ''
     extra.specs.step = specs.step != null ? String(specs.step) : ''
-    extra.thresholds.min = thresholds.min != null ? String(thresholds.min) : ''
-    extra.thresholds.max = thresholds.max != null ? String(thresholds.max) : ''
-    extra.thresholds.alarm = thresholds.alarm ?? false
-    extra.attrsRows = Object.entries(attrs).map(([key, value]) => ({ key, value: String(value) }))
+    extra.specThresholds.min = thresholds.min != null ? String(thresholds.min) : ''
+    extra.specThresholds.max = thresholds.max != null ? String(thresholds.max) : ''
+    extra.specThresholds.alarm = thresholds.alarm ?? false
+    extra.attrsRows = extraKeys.map(([key, value]) => ({ key, value: String(value) }))
   }
   else {
     resetForm()
@@ -141,7 +144,7 @@ function removeAttrRow(index: number) {
   extra.attrsRows.splice(index, 1)
 }
 
-// 组装提交载荷：specs/thresholds/attrs 为空子键时省略
+// 组装提交载荷：统一 specs（量程 + 告警阈值 + 自由键），空子键省略
 function buildSensorPayload(): SensorUpdatePayload {
   const payload: SensorUpdatePayload = {
     name: form.name.trim(),
@@ -165,35 +168,32 @@ function buildSensorPayload(): SensorUpdatePayload {
   if (step != null) {
     specs.step = step
   }
-  if (Object.keys(specs).length) {
-    payload.specs = specs
-  }
-
-  const thresholds: SensorThresholds = {}
-  const tMin = toNumber(extra.thresholds.min)
-  const tMax = toNumber(extra.thresholds.max)
+  const thresholds: SensorSpecs['thresholds'] = {}
+  const tMin = toNumber(extra.specThresholds.min)
+  const tMax = toNumber(extra.specThresholds.max)
   if (tMin != null) {
     thresholds.min = tMin
   }
   if (tMax != null) {
     thresholds.max = tMax
   }
-  if (extra.thresholds.alarm) {
+  if (extra.specThresholds.alarm) {
     thresholds.alarm = true
   }
   if (Object.keys(thresholds).length) {
-    payload.thresholds = thresholds
+    specs.thresholds = thresholds
   }
 
-  const attrs: Record<string, string> = {}
+  // 自由扩展键平铺进 specs
   extra.attrsRows.forEach((row) => {
     const key = row.key.trim()
     if (key) {
-      attrs[key] = row.value
+      specs[key] = row.value
     }
   })
-  if (Object.keys(attrs).length) {
-    payload.attrs = attrs
+
+  if (Object.keys(specs).length) {
+    payload.specs = specs
   }
 
   return payload
@@ -302,23 +302,23 @@ async function submitSensor(): Promise<boolean> {
         </div>
       </div>
 
-      <!-- 阈值 thresholds -->
+      <!-- 告警阈值（统一并入 specs.thresholds） -->
       <div class="flex flex-col gap-2 col-span-2">
-        <span class="text-sm font-medium">告警阈值 (thresholds)</span>
+        <span class="text-sm font-medium">告警阈值 (specs.thresholds)</span>
         <div class="gap-3 grid grid-cols-2">
-          <FaInput v-model="extra.thresholds.min" type="number" placeholder="min" class="w-full" />
-          <FaInput v-model="extra.thresholds.max" type="number" placeholder="max" class="w-full" />
+          <FaInput v-model="extra.specThresholds.min" type="number" placeholder="min" class="w-full" />
+          <FaInput v-model="extra.specThresholds.max" type="number" placeholder="max" class="w-full" />
         </div>
         <div class="flex gap-3 items-center">
           <label class="text-sm font-medium">告警</label>
-          <FaSwitch v-model="extra.thresholds.alarm" />
+          <FaSwitch v-model="extra.specThresholds.alarm" />
         </div>
       </div>
 
-      <!-- 扩展属性 attrs（键值对动态行） -->
+      <!-- 自由扩展键（统一并入 specs 平铺，原 attrs 能力） -->
       <div class="flex flex-col gap-2 col-span-2">
         <div class="flex items-center justify-between">
-          <span class="text-sm font-medium">扩展属性 (attrs)</span>
+          <span class="text-sm font-medium">扩展键 (specs 内自由键)</span>
           <FaButton variant="outline" size="sm" type="button" @click="addAttrRow">
             <FaIcon name="i-ri:add-line" class="mr-1 size-4" />
             添加属性

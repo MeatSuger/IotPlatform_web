@@ -33,7 +33,7 @@ const saving = ref(false)
 
 // ==================== 表单字段 ====================
 // 与传感器弹窗同理：只把「走 FaForm/FaFormItem 自动绑定」的静态字段放进 :model，
-// 动态 config 参数与启用开关用独立 v-model 管理（extra），
+// 动态 specs 参数与启用开关用独立 v-model 管理（extra），
 // 避免 FaForm 双向同步时把未注册字段从 model 中删掉导致表单渲染崩溃。
 const form = reactive({
   id: '',
@@ -45,10 +45,10 @@ const form = reactive({
 const extra = reactive<{
   enabled: boolean
   // 表单编辑值（字符串输入 / 开关布尔），提交时按字段表转换
-  config: Record<string, any>
+  specs: Record<string, any>
 }>({
   enabled: true,
-  config: {},
+  specs: {},
 })
 
 const driverOptions = actuatorDrivers.map(driver => ({
@@ -64,7 +64,7 @@ const transportOptions = actuatorTransports.map(transport => ({
 // 当前 transport 的字段定义（驱动弹窗渲染与提交转换）
 const transportFields = computed(() => ACTUATOR_TRANSPORT_FIELDS[form.transport])
 
-// 编辑中的旧版定义（config 无 transport 字段）提示升级
+// 编辑中的旧版定义（specs 无 transport 字段）提示升级
 const editingLegacyActuator = ref(false)
 
 const validationSchema = toTypedSchema(z.object({
@@ -75,17 +75,17 @@ const validationSchema = toTypedSchema(z.object({
 }))
 
 function resetConfigFields() {
-  Object.keys(extra.config).forEach((key) => {
-    delete extra.config[key]
+  Object.keys(extra.specs).forEach((key) => {
+    delete extra.specs[key]
   })
   for (const field of ACTUATOR_TRANSPORT_FIELDS[form.transport]) {
     if (field.default !== undefined) {
-      extra.config[field.key] = field.type === 'bool'
+      extra.specs[field.key] = field.type === 'bool'
         ? Boolean(field.default)
         : String(field.default)
     }
     else if (field.type === 'bool') {
-      extra.config[field.key] = true
+      extra.specs[field.key] = true
     }
   }
 }
@@ -96,19 +96,19 @@ function prefill() {
     form.id = act.id
     form.name = act.name ?? ''
     form.driver = act.driver
-    const legacy = !act.config?.transport
+    const legacy = !act.specs?.transport
     editingLegacyActuator.value = legacy
     form.transport = legacy
       ? 'gpio'
-      : (actuatorTransports.includes(act.config!.transport) ? act.config!.transport : 'gpio')
+      : (actuatorTransports.includes(act.specs!.transport) ? act.specs!.transport : 'gpio')
     extra.enabled = act.enabled ?? true
     resetConfigFields()
-    const config = act.config ?? {}
+    const specsMap = act.specs ?? {}
     for (const field of transportFields.value) {
-      if (config[field.key] != null) {
-        extra.config[field.key] = field.type === 'bool'
-          ? Boolean(config[field.key])
-          : String(config[field.key])
+      if (specsMap[field.key] != null) {
+        extra.specs[field.key] = field.type === 'bool'
+          ? Boolean(specsMap[field.key])
+          : String(specsMap[field.key])
       }
     }
   }
@@ -163,19 +163,19 @@ async function onSubmit(): Promise<boolean> {
     return false
   }
 
-  // 组装 config：transport 固定注入，字段按当前 transport 的表驱动转换
-  const config: Record<string, any> = { transport: form.transport }
+  // 组装 specs：transport 固定注入，字段按当前 transport 的表驱动转换
+  const specs: Record<string, any> = { transport: form.transport }
   for (const field of transportFields.value) {
-    const raw = extra.config[field.key]
+    const raw = extra.specs[field.key]
     if (field.type === 'bool') {
-      config[field.key] = Boolean(raw)
+      specs[field.key] = Boolean(raw)
       continue
     }
     if (field.type === 'select') {
       const sel = String(raw ?? '').trim()
       if (sel !== '') {
         const num = Number(sel)
-        config[field.key] = Number.isNaN(num) ? sel : num
+        specs[field.key] = Number.isNaN(num) ? sel : num
       }
       continue
     }
@@ -192,7 +192,7 @@ async function onSubmit(): Promise<boolean> {
       useFaToast().warning(`${field.label} 需为数字`)
       return false
     }
-    config[field.key] = num
+    specs[field.key] = num
   }
 
   const common = {
@@ -206,13 +206,13 @@ async function onSubmit(): Promise<boolean> {
         id,
         driver: form.driver,
         ...common,
-        config,
+        specs,
       }
       await actuatorApi.create(deviceId, payload)
       useFaToast().success('执行器添加成功')
     }
     else {
-      const payload: ActuatorUpdatePayload = { ...common, config }
+      const payload: ActuatorUpdatePayload = { ...common, specs }
       await actuatorApi.update(deviceId, props.actuator!.id, payload)
       useFaToast().success('执行器更新成功')
     }
@@ -238,7 +238,7 @@ async function onSubmit(): Promise<boolean> {
   >
     <div class="py-2 flex flex-col gap-4 min-w-0">
       <div v-if="editingLegacyActuator" class="text-xs text-amber-500">
-        旧版驱动模型定义，保存后将升级为 transport 模型（config.transport）
+        旧版驱动模型定义，保存后将升级为 transport 模型（specs.transport）
       </div>
       <FaForm
         v-if="show"
@@ -270,20 +270,20 @@ async function onSubmit(): Promise<boolean> {
         </FaFormItem>
 
         <div class="flex flex-col gap-2 col-span-2">
-          <span class="text-sm font-medium">参数 (config)</span>
+          <span class="text-sm font-medium">参数 (specs)</span>
           <div class="gap-3 grid grid-cols-2">
             <template v-for="field in transportFields" :key="field.key">
               <div v-if="field.type === 'bool'" class="flex gap-3 col-span-2 items-center">
-                <FaSwitch v-model="extra.config[field.key]" />
+                <FaSwitch v-model="extra.specs[field.key]" />
                 <span class="text-sm text-gray-400">{{ field.label }}<span v-if="field.hint">（{{ field.hint }}）</span></span>
               </div>
               <div v-else-if="field.type === 'select'" class="flex flex-col gap-1">
                 <label class="text-sm text-gray-400">{{ field.label }}<span v-if="field.required"> *</span></label>
-                <FaSelect v-model="extra.config[field.key]" :options="field.options ?? []" class="w-full" />
+                <FaSelect v-model="extra.specs[field.key]" :options="field.options ?? []" class="w-full" />
               </div>
               <div v-else class="flex flex-col gap-1">
                 <label class="text-sm text-gray-400">{{ field.label }}<span v-if="field.required"> *</span></label>
-                <FaInput v-model="extra.config[field.key]" type="number" :placeholder="field.hint ?? '默认值'">
+                <FaInput v-model="extra.specs[field.key]" type="number" :placeholder="field.hint ?? '默认值'">
                   <template v-if="field.unit" #end>
                     <span class="text-xs text-gray-400">{{ field.unit }}</span>
                   </template>

@@ -5,41 +5,41 @@ interface ActuatorRecord {
   id: string
   name: string
   driver: string
-  config?: Record<string, any>
+  specs?: Record<string, any>
   enabled?: boolean
   createdAt?: string
   updatedAt?: string
 }
 
-// 设备类型 = config.transport（driver 为后端枚举占位，固件忽略），
-// config 字段与固件 docs/mqtt-api.md transport 参数保持一致
+// 设备类型 = specs.transport（driver 为后端枚举占位，固件忽略），
+// specs 字段与固件 docs/mqtt-api.md transport 参数保持一致（2026 命名统一：原 config 改名）
 const actuatorTemplates: ActuatorRecord[] = [
   {
     id: 'led1',
     name: '氛围灯',
     driver: 'led',
-    config: { transport: 'led_strip', gpio: 48, count: 1 },
+    specs: { transport: 'led_strip', gpio: 48, count: 1 },
     enabled: true,
   },
   {
     id: 'servo1',
     name: '云台舵机',
     driver: 'servo',
-    config: { transport: 'pwm', pin: 18, freq_hz: 50 },
+    specs: { transport: 'pwm', pin: 18, freq_hz: 50 },
     enabled: true,
   },
   {
     id: 'relay1',
     name: '继电器',
     driver: 'led',
-    config: { transport: 'gpio', pin: 4, active_high: true, initial: 0 },
+    specs: { transport: 'gpio', pin: 4, active_high: true, initial: 0 },
     enabled: true,
   },
   {
     id: 'dac1',
     name: 'SPI DAC',
     driver: 'servo',
-    config: { transport: 'spi', clk: 6, mosi: 7, cs: 10, freq_hz: 1000000, mode: 0 },
+    specs: { transport: 'spi', clk: 6, mosi: 7, cs: 10, freq_hz: 1000000, mode: 0 },
     enabled: true,
   },
 ]
@@ -52,7 +52,7 @@ const deviceConfigVersionMap = new Map<string, number>()
 // 导出单例存储：device.fake.ts 的详情接口（actuators = 定义）与 CRUD 同源
 export function getDeviceActuatorDefs(deviceId: string): ActuatorRecord[] {
   if (!deviceActuatorMap.has(deviceId)) {
-    deviceActuatorMap.set(deviceId, actuatorTemplates.map(t => ({ ...t, config: { ...t.config } })))
+    deviceActuatorMap.set(deviceId, actuatorTemplates.map(t => ({ ...t, specs: { ...t.specs } })))
   }
   return deviceActuatorMap.get(deviceId)!
 }
@@ -108,8 +108,8 @@ export default defineFakeRoute([
       if (!['led', 'servo', 'speaker'].includes(body.driver)) {
         return { code: 400, message: 'driver 需为 led / servo / speaker（兼容标识）', data: null }
       }
-      if (!['gpio', 'pwm', 'spi', 'led_strip'].includes(body.config?.transport)) {
-        return { code: 400, message: 'config.transport 需为 gpio / pwm / spi / led_strip', data: null }
+      if (!['gpio', 'pwm', 'spi', 'led_strip'].includes(body.specs?.transport)) {
+        return { code: 400, message: 'specs.transport 需为 gpio / pwm / spi / led_strip', data: null }
       }
       if (list.some(a => a.id === body.id)) {
         return { code: 400, message: '执行器标识已存在', data: null }
@@ -119,7 +119,7 @@ export default defineFakeRoute([
         id: body.id,
         name: body.name || '',
         driver: body.driver,
-        config: body.config,
+        specs: body.specs,
         enabled: body.enabled ?? true,
         createdAt: now,
         updatedAt: now,
@@ -146,8 +146,8 @@ export default defineFakeRoute([
       if (body.driver && !['led', 'servo', 'speaker'].includes(body.driver)) {
         return { code: 400, message: 'driver 需为 led / servo / speaker（兼容标识）', data: null }
       }
-      if (body.config && body.config.transport != null && !['gpio', 'pwm', 'spi', 'led_strip'].includes(body.config.transport)) {
-        return { code: 400, message: 'config.transport 需为 gpio / pwm / spi / led_strip', data: null }
+      if (body.specs && body.specs.transport != null && !['gpio', 'pwm', 'spi', 'led_strip'].includes(body.specs.transport)) {
+        return { code: 400, message: 'specs.transport 需为 gpio / pwm / spi / led_strip', data: null }
       }
       list[idx] = {
         ...list[idx],

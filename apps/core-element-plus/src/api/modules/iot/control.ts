@@ -5,7 +5,7 @@ import api from '../../index'
 // ==================== 设备详情（真实 API: GET /api/devices/{deviceId}） ====================
 // 1.7.0 起详情即物模型视图（服务端完成 join）：
 //   - sensors:   传感器物模型数组 = 定义字段 + latest（最近一次上报值，null = 从未上报）
-//   - actuators: 执行器物模型数组（= 定义，含 config.transport）
+//   - actuators: 执行器物模型数组（= 定义，含 specs.transport）
 // 设备无定义时两数组均为 []（非 null）。
 
 // 传感器定义 + 最近一次上报值
@@ -44,14 +44,9 @@ export interface DeviceConfigPayload {
     wifi?: { ssid?: string, password?: string }
     mqtt?: { host?: string, port?: number, tls?: boolean }
   }
+  // 全局 sensor.thresholds 已删除（2026 统一：告警阈值收敛到每传感器 specs.thresholds）
   sensor?: {
     reportInterval?: number
-    thresholds?: Record<string, { min?: number, max?: number }>
-  }
-  actuator?: {
-    mode?: string
-    schedule?: { on?: string, off?: string }
-    pwm?: number
   }
   camera?: {
     protocol?: string

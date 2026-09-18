@@ -62,7 +62,8 @@ const transportOptions = actuatorTransports.map(transport => ({
 }))
 
 // 当前 transport 的字段定义（驱动弹窗渲染与提交转换）
-const transportFields = computed(() => ACTUATOR_TRANSPORT_FIELDS[form.transport])
+// ?? [] 兜底：字段表缺失时渲染为空字段，而不是让 for...of 抛错导致表单/下拉异常
+const transportFields = computed(() => ACTUATOR_TRANSPORT_FIELDS[form.transport] ?? [])
 
 // 编辑中的旧版定义（specs 无 transport 字段）提示升级
 const editingLegacyActuator = ref(false)
@@ -78,7 +79,7 @@ function resetConfigFields() {
   Object.keys(extra.specs).forEach((key) => {
     delete extra.specs[key]
   })
-  for (const field of ACTUATOR_TRANSPORT_FIELDS[form.transport]) {
+  for (const field of transportFields.value) {
     if (field.default !== undefined) {
       extra.specs[field.key] = field.type === 'bool'
         ? Boolean(field.default)

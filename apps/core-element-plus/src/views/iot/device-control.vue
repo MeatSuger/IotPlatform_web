@@ -10,6 +10,7 @@ import { sensorApi } from '@/api/modules/iot/sensor'
 import { useDeviceWebSocket } from '@/composables/useDeviceWebSocket'
 import ActuatorEditDialog from './components/ActuatorEditDialog.vue'
 import DeviceEditDialog from './components/DeviceEditDialog.vue'
+import EpdImagePicker from './components/EpdImagePicker.vue'
 import LedStripPicker from './components/LedStripPicker.vue'
 import SensorEditDialog from './components/SensorEditDialog.vue'
 
@@ -434,6 +435,9 @@ function actuatorConfigSummary(act: Actuator): string {
   }
   if (transport === 'led_strip') {
     return `GPIO ${cfg.gpio ?? 48}${cfg.count ? ` · ${cfg.count} 颗` : ''}`
+  }
+  if (transport === 'epd') {
+    return '板载 JD79665 · 768×552 四色'
   }
   if (transport === 'gpio') {
     return `pin ${cfg.pin ?? '-'}${cfg.active_high === false ? ' · 低有效' : ''}`
@@ -980,6 +984,32 @@ onBeforeUnmount(() => {
                         off-icon="i-ri:flashlight-line"
                         @update:model-value="(val?: boolean) => onLedStripToggle(act, val)"
                       />
+                    </div>
+                  </template>
+
+                  <!-- epd：墨水屏投图（图片位图经 MQTT over WSS 直发设备，不走命令原语） -->
+                  <template v-else-if="transportOf(act) === 'epd'">
+                    <div class="flex gap-2 items-center">
+                      <FaPopover v-model="runtimeState(act).pickerOpen" align="start" class="p-0 w-[min(460px,92vw)]" :side-offset="4">
+                        <button
+                          class="text-sm px-3 border border-black/10 rounded-md flex gap-1.5 h-8 cursor-pointer shadow-sm transition-transform items-center dark:border-white/10 disabled:opacity-60 disabled:cursor-not-allowed hover:scale-105"
+                          :disabled="actuatorCmdBusy === act.id"
+                          title="打开投图面板"
+                          aria-label="打开投图面板"
+                        >
+                          <FaIcon name="i-ri:image-add-line" class="size-4" />
+                          投图
+                        </button>
+                        <template #panel>
+                          <EpdImagePicker
+                            :device-id="selectedDetail?.deviceId ?? ''"
+                            :disabled="actuatorCmdBusy === act.id"
+                          />
+                        </template>
+                      </FaPopover>
+                      <FaTag variant="secondary">
+                        768×552 · 4 色
+                      </FaTag>
                     </div>
                   </template>
 

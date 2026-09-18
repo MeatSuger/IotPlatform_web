@@ -108,8 +108,8 @@ export default defineFakeRoute([
       if (!['led', 'servo', 'speaker'].includes(body.driver)) {
         return { code: 400, message: 'driver 需为 led / servo / speaker（兼容标识）', data: null }
       }
-      if (!['gpio', 'pwm', 'spi', 'led_strip'].includes(body.specs?.transport)) {
-        return { code: 400, message: 'specs.transport 需为 gpio / pwm / spi / led_strip', data: null }
+      if (!['gpio', 'pwm', 'spi', 'led_strip', 'epd'].includes(body.specs?.transport)) {
+        return { code: 400, message: 'specs.transport 需为 gpio / pwm / spi / led_strip / epd', data: null }
       }
       if (list.some(a => a.id === body.id)) {
         return { code: 400, message: '执行器标识已存在', data: null }
@@ -146,8 +146,8 @@ export default defineFakeRoute([
       if (body.driver && !['led', 'servo', 'speaker'].includes(body.driver)) {
         return { code: 400, message: 'driver 需为 led / servo / speaker（兼容标识）', data: null }
       }
-      if (body.specs && body.specs.transport != null && !['gpio', 'pwm', 'spi', 'led_strip'].includes(body.specs.transport)) {
-        return { code: 400, message: 'specs.transport 需为 gpio / pwm / spi / led_strip', data: null }
+      if (body.specs && body.specs.transport != null && !['gpio', 'pwm', 'spi', 'led_strip', 'epd'].includes(body.specs.transport)) {
+        return { code: 400, message: 'specs.transport 需为 gpio / pwm / spi / led_strip / epd', data: null }
       }
       list[idx] = {
         ...list[idx],

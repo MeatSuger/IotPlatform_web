@@ -14,7 +14,9 @@ export type ActuatorDriver = (typeof actuatorDrivers)[number]
 // ==================== transport（设备类型 / 传输原语） ====================
 // 写入类外设按 transport 实例化；固件不做器件语义换算，命令 value 下发传输原语，
 // 角度/颜色等语义由云端（前端）换算后发送。
-export const actuatorTransports = ['gpio', 'pwm', 'spi', 'led_strip'] as const
+// epd = 板载墨水屏（JD79665）：不经命令原语传图（106KB 位图），
+// 由前端经 MQTT over WSS 直接向 iot/{deviceId}/img/* 发布，见 EpdImagePicker.vue。
+export const actuatorTransports = ['gpio', 'pwm', 'spi', 'led_strip', 'epd'] as const
 
 export type ActuatorTransport = (typeof actuatorTransports)[number]
 
@@ -23,6 +25,7 @@ export const actuatorTransportLabels: Record<ActuatorTransport, string> = {
   pwm: 'PWM 输出 (pwm)',
   spi: 'SPI 主机写 (spi)',
   led_strip: 'WS2812 灯带 (led_strip)',
+  epd: '墨水屏投图 (epd)',
 }
 
 // transport config 字段定义：驱动执行器表单动态渲染 + 参数校验
@@ -65,6 +68,8 @@ export const ACTUATOR_TRANSPORT_FIELDS: Record<ActuatorTransport, TransportConfi
     { key: 'gpio', label: '数据引脚', type: 'number', default: '48' },
     { key: 'count', label: 'LED 数量', type: 'number', default: '1' },
   ],
+  // 板载墨水屏：固定硬件，无驱动参数（图片经 MQTT 直发，见 EpdImagePicker.vue）
+  epd: [],
 }
 
 export interface Actuator {
@@ -75,7 +80,7 @@ export interface Actuator {
   // 兼容标识（后端枚举 led/servo/speaker，固件忽略）—— 创建时用户自选
   driver: ActuatorDriver
   // 驱动参数 specs（后端 2026 命名统一：原 config 改名，与 Sensor 定义体同名）；
-  // 真实设备类型由 specs.transport 表达（gpio/pwm/spi/led_strip）
+  // 真实设备类型由 specs.transport 表达（gpio/pwm/spi/led_strip/epd）
   specs?: Record<string, any>
   // 是否启用（false = 期望设备卸载该执行器）
   enabled?: boolean

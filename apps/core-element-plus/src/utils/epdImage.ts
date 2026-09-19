@@ -4,29 +4,32 @@
 // 面板：JD79665（华为 A1）768×552，2bpp，4 像素/字节，MSB first；
 // 颜色码 0=黑 1=白 2=黄 3=红（与固件 components/periph/src/drivers/epd_driver.c 一致）。
 //
-// 这条链路只服务「手机拍摄的照片」，所以不再提供多种抖动算法/处理风格，
-// 固定走一条对照片最优的流水线：
+// 面板 LUT 固定、只能控制 framebuffer 的 4 色像素值，所以算法只负责决定「原图这个
+// 像素该发哪一个四色状态」，走一条针对固定 EPD 的感知量化流水线：
 //
-//   白平衡（轻度灰世界，纠正室内偏色）
-//   → 色调映射（曝光 / 饱和度 / 对比度 / S 曲线）
-//   → 动态范围压缩（亮度 p1..p99 铺满，并保护高光白）
-//   → OKLab 感知匹配（中性色保护，避免中灰被判成红）
-//   → Floyd–Steinberg 误差扩散（蛇形扫描）
+//   线性化 / Gamma → OKLab
+//   → 白平衡 / 色调映射 / 动态范围压缩
+//   → 亮度 + 色度加权的 OKLab 最近色（中性色软惩罚）
+//   → Sobel 梯度边缘保护：
+//        边缘像素 → 直接最近色量化（不扩散误差，文字 / 线条保持锐利）
+//        非边缘   → Stucki 误差扩散（蛇形扫描），传播强度按区域自适应
+//   → 2bpp framebuffer（4 像素 / 字节，MSB first，与固件一致）
 //
 // 算法参考：
-//  - paperlesspaper/epdoptimize —— 标定调色板、色调映射、LAB 亮度动态范围压缩、
-//    serpentine 扫描、chroma 感知匹配  https://github.com/paperlesspaper/epdoptimize
-//  - ibezkrovnyi/image-quantization (image-q) —— 误差扩散与色彩距离工程实现
-//  - Tanner Helland《Dithering – eleven algorithms》—— Floyd–Steinberg 核系数
+//  - paperlesspaper/epdoptimize —— 标定调色板、色调映射、LAB 动态范围压缩、边缘保护
+//    https://github.com/paperlesspaper/epdoptimize
+//  - ibezkrovnyi/image-quantization (image-q) —— 误差扩散核与色彩距离工程实现
+//  - Tanner Helland《Dithering – eleven algorithms》/ Stucki 核系数
 //
-// 为什么只保留 Floyd–Steinberg：照片是连续色调 + 噪声，误差扩散观感最好；
-// 有序抖动（Bayer）会产生规则网纹，直接量化会出现色块，都不适合照片。
-//
-// 抖动的作用就是「用四种墨水合成出很多层次」（颜色深度）：
-//   - 中性区域：用黑/白点的密度表现灰阶（人眼平均后就是中间灰）；
-//   - 彩色区域：用黑/白/黄/红四色混合表现中间色；
-//   - 高光（白墙/天空/纸）保持纯白，暗部保持纯黑，避免层次被压成灰。
-// 因此四色面板虽然只有 4 种颜色，照片仍能显示出丰富的明暗与色调层次。
+// 关键取舍：
+//  - 调色板用「面板实测外观色」而不是 #FF0000/#FFFF00 原色：LUT 输出是黑盒，
+//    量化必须按实际显示色反推（device 码 0/1/2/3 不变）；
+//  - 距离用 OKLab 而不是 RGB 欧氏距离（RGB 距离不等于人眼感知距离）；
+//  - 误差扩散用 Stucki：比 Floyd–Steinberg 更平滑，四色屏上规则网纹更少；
+//  - 误差按区域自适应传播（平坦 0.8 / 渐变 0.6 / 高频 0.3 / 边缘 0）：
+//    四色数量太少，100% 传播很容易形成明显纹理；
+//  - 抖动的作用是「用四种墨水合成出很多层次」：中性区域用黑白点密度表现灰阶，
+//    彩色区域用四色混合表现中间色，高光保持纯白、暗部保持纯黑。
 // ============================================================================
 
 export interface EpdPaletteEntry {
@@ -92,6 +95,20 @@ const NEUTRAL_SOURCE_CHROMA = 0.04
 const CHROMATIC_PALETTE_CHROMA = 0.05
 /** 最中性像素对有彩色项的惩罚（OKLab 距离平方），需大于「中灰到红」与「中灰到黑/白」的差。 */
 const NEUTRAL_CHROMA_PENALTY = 0.18
+
+/**
+ * 距离权重：OKLab 的亮度分量略微加权。
+ * 四色屏最容易糊掉的是中间调，稍微偏向亮度可以保住明暗层次。
+ */
+const DIST_W_LUMA = 1.1
+const DIST_W_CHROMA = 1.0
+
+/** 边缘阈值（Sobel 幅值，已按 /4 归一化，黑白硬边约 1.0）：超过视为文字 / 线条边缘。 */
+const EDGE_GRADIENT = 0.8
+/** 自适应误差传播强度：平坦 / 渐变 / 高频（边缘为 0，不传播）。 */
+const PROP_FLAT = 0.8
+const PROP_MID = 0.6
+const PROP_HIGH = 0.3
 
 // ============================================================================
 // 颜色空间
@@ -248,7 +265,7 @@ function applyDynamicRange(rgb: Float32Array): void {
 }
 
 // ============================================================================
-// 抖动：唯一算法 —— Floyd–Steinberg + 蛇形扫描
+// 抖动：Stucki 误差扩散 + 蛇形扫描 + Sobel 边缘保护 + 自适应传播强度
 // ============================================================================
 
 interface KernelTap {
@@ -257,17 +274,59 @@ interface KernelTap {
   w: number
 }
 
-/** Floyd–Steinberg 核（Tanner Helland / image-q 同系数）。 */
-const FS_KERNEL: KernelTap[] = [
-  { dx: 1, dy: 0, w: 7 / 16 },
-  { dx: -1, dy: 1, w: 3 / 16 },
-  { dx: 0, dy: 1, w: 5 / 16 },
-  { dx: 1, dy: 1, w: 1 / 16 },
+/**
+ * Stucki 核（比 Floyd–Steinberg 更平滑，四色 EPD 上规则网纹更少）：
+ *         X   8   4
+ *   2   4   8   4   2
+ *   1   2   4   2   1   /42
+ */
+const STUCKI_KERNEL: KernelTap[] = [
+  { dx: 1, dy: 0, w: 8 / 42 },
+  { dx: 2, dy: 0, w: 4 / 42 },
+  { dx: -2, dy: 1, w: 2 / 42 },
+  { dx: -1, dy: 1, w: 4 / 42 },
+  { dx: 0, dy: 1, w: 8 / 42 },
+  { dx: 1, dy: 1, w: 4 / 42 },
+  { dx: 2, dy: 1, w: 2 / 42 },
+  { dx: -2, dy: 2, w: 1 / 42 },
+  { dx: -1, dy: 2, w: 2 / 42 },
+  { dx: 0, dy: 2, w: 4 / 42 },
+  { dx: 1, dy: 2, w: 2 / 42 },
+  { dx: 2, dy: 2, w: 1 / 42 },
 ]
 
-/** 误差扩散（逐行换向的蛇形扫描，减少方向性纹路）。误差在线性光空间累积。 */
+/**
+ * Sobel 梯度幅值图（在色调映射后的亮度上算），用于：
+ *   1) 边缘保护 —— 强边缘直接量化、不扩散误差（文字 / 线条 / 图标保持锐利）；
+ *   2) 自适应传播 —— 平坦区域多传、高频区域少传，避免四色屏出现规则网纹。
+ * 幅值按 /4 归一化，黑白硬边约为 1.0。
+ */
+function computeGradient(rgb: Float32Array, w: number, h: number): Float32Array {
+  const lum = new Float32Array(w * h)
+  for (let i = 0, p = 0; i < w * h; i++, p += 3) {
+    lum[i] = 0.2126 * rgb[p] + 0.7152 * rgb[p + 1] + 0.0722 * rgb[p + 2]
+  }
+
+  const grad = new Float32Array(w * h)
+  for (let y = 1; y < h - 1; y++) {
+    const row = y * w
+    for (let x = 1; x < w - 1; x++) {
+      const i = row + x
+      const gx = (lum[i - w + 1] + 2 * lum[i + 1] + lum[i + w + 1])
+        - (lum[i - w - 1] + 2 * lum[i - 1] + lum[i + w - 1])
+      const gy = (lum[i + w - 1] + 2 * lum[i + w] + lum[i + w + 1])
+        - (lum[i - w - 1] + 2 * lum[i - w] + lum[i - w + 1])
+      grad[i] = Math.hypot(gx, gy) * 0.25
+    }
+  }
+  return grad
+}
+
+/** 误差扩散（蛇形扫描，误差在线性光空间累积）。 */
 function diffuse(
   lin: Float32Array,
+  grad: Float32Array,
+  srcChroma: Float32Array,
   w: number,
   h: number,
   idx: Uint8Array,
@@ -282,19 +341,39 @@ function diffuse(
     const step = ltr ? 1 : -1
 
     for (let x = start; x !== end; x += step) {
-      const p = (y * w + x) * 3
+      const i = y * w + x
+      const p = i * 3
       const r = lin[p]
       const g = lin[p + 1]
       const b = lin[p + 2]
-      const k = nearestPalette(r, g, b, palLab, palChroma)
-      idx[y * w + x] = k
+      const k = nearestPalette(r, g, b, srcChroma[i], palLab, palChroma)
+      idx[i] = k
 
-      const er = r - palLin[k][0]
-      const eg = g - palLin[k][1]
-      const eb = b - palLin[k][2]
+      // 自适应传播强度：边缘不传播（文字直通），高频弱传播（避免网纹），平坦正常传播
+      const gmag = grad[i]
+      let strength: number
+      if (gmag >= EDGE_GRADIENT) {
+        strength = 0
+      }
+      else if (gmag >= 0.45) {
+        strength = PROP_HIGH
+      }
+      else if (gmag >= 0.18) {
+        strength = PROP_MID
+      }
+      else {
+        strength = PROP_FLAT
+      }
+      if (strength === 0) {
+        continue
+      }
 
-      for (let t = 0; t < FS_KERNEL.length; t++) {
-        const tap = FS_KERNEL[t]
+      const er = (r - palLin[k][0]) * strength
+      const eg = (g - palLin[k][1]) * strength
+      const eb = (b - palLin[k][2]) * strength
+
+      for (let t = 0; t < STUCKI_KERNEL.length; t++) {
+        const tap = STUCKI_KERNEL[t]
         const nx = x + (ltr ? tap.dx : -tap.dx)
         const ny = y + tap.dy
         if (nx < 0 || nx >= w || ny >= h) {
@@ -313,18 +392,24 @@ function diffuse(
 // 调色板匹配
 // ============================================================================
 
-/** OKLab 最近调色板项（返回下标 = device 颜色码）；低色度像素对有彩色项加惩罚。 */
+/**
+ * OKLab 最近调色板项（返回下标 = device 颜色码）。
+ *
+ * @param srcChroma 源像素（未叠加扩散误差）的 OKLab 色度。
+ *   中性保护必须按「原图颜色」判定而不是按误差累积后的值：否则误差扩散会把
+ *   极小的色偏逐像素放大，累积色度一超过阈值惩罚就失效，中灰会整片偏黄/偏红。
+ */
 function nearestPalette(
   r: number,
   g: number,
   b: number,
+  srcChroma: number,
   palLab: Array<[number, number, number]>,
   palChroma: number[],
 ): number {
   const [l, a, bb] = linearRgbToOklab(r, g, b)
-  const chroma = Math.hypot(a, bb)
-  const penalty = chroma < NEUTRAL_SOURCE_CHROMA
-    ? (1 - chroma / NEUTRAL_SOURCE_CHROMA) * NEUTRAL_CHROMA_PENALTY
+  const penalty = srcChroma < NEUTRAL_SOURCE_CHROMA
+    ? (1 - srcChroma / NEUTRAL_SOURCE_CHROMA) * NEUTRAL_CHROMA_PENALTY
     : 0
 
   let best = 0
@@ -334,7 +419,7 @@ function nearestPalette(
     const dl = l - p[0]
     const da = a - p[1]
     const db = bb - p[2]
-    let d = dl * dl + da * da + db * db
+    let d = DIST_W_LUMA * dl * dl + DIST_W_CHROMA * (da * da + db * db)
     if (penalty > 0 && palChroma[k] >= CHROMATIC_PALETTE_CHROMA) {
       d += penalty
     }
@@ -380,19 +465,26 @@ export function imageDataToPanel(src: ImageData): ConvertResult {
   applyToneMapping(rgb)
   applyDynamicRange(rgb)
 
-  // 3) 线性光（误差扩散空间）+ 调色板 OKLab（匹配空间）
+  // 3) 线性光（误差扩散空间）+ 源像素色度（中性保护）+ 调色板 OKLab（匹配空间）
   const lin = new Float32Array(n * 3)
   for (let i = 0; i < n * 3; i++) {
     lin[i] = srgbToLinear(rgb[i])
+  }
+  // 源像素 OKLab 色度：中性保护按原图判定，避免误差累积把色偏放大
+  const srcChroma = new Float32Array(n)
+  for (let i = 0, p = 0; i < n; i++, p += 3) {
+    const lab = linearRgbToOklab(lin[p], lin[p + 1], lin[p + 2])
+    srcChroma[i] = Math.hypot(lab[1], lab[2])
   }
   // 调色板色值是 0..255，srgbToLinear 需要 0..1，必须先归一化（漏了会全部匹配到黑）
   const palLin = EPD_PALETTE.map(e => e.color.map(v => srgbToLinear(v / 255)) as [number, number, number])
   const palLab = palLin.map(c => linearRgbToOklab(c[0], c[1], c[2]))
   const palChroma = palLab.map(p => Math.hypot(p[1], p[2]))
 
-  // 4) Floyd–Steinberg 误差扩散
+  // 4) 梯度图（边缘保护 + 自适应传播）→ Stucki 误差扩散
+  const grad = computeGradient(rgb, w, h)
   const idx = new Uint8Array(n)
-  diffuse(lin, w, h, idx, palLin, palLab, palChroma)
+  diffuse(lin, grad, srcChroma, w, h, idx, palLin, palLab, palChroma)
 
   return { packed: pack2bpp(idx), idx, width: w, height: h }
 }

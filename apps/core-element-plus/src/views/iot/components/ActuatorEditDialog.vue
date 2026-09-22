@@ -246,15 +246,15 @@ async function onSubmit(): Promise<boolean> {
         ref="formRef"
         :model="form"
         :validation-schema="validationSchema"
-        class="gap-3 grid grid-cols-2 min-w-0"
+        class="gap-3 grid grid-cols-1 min-w-0 sm:grid-cols-2"
       >
         <FaFormItem
-          name="id" label="标识 (id)" class="col-span-2" required
+          name="id" label="标识 (id)" class="sm:col-span-2" required
           description="小写字母开头，≤11 字符；= 设备侧控制命令 action"
         >
           <FaInput placeholder="如：relay1、fan1" :disabled="mode === 'edit'" class="w-full" />
         </FaFormItem>
-        <FaFormItem name="name" label="名称（可选）" class="col-span-2">
+        <FaFormItem name="name" label="名称（可选）" class="sm:col-span-2">
           <FaInput placeholder="如：继电器" class="w-full" />
         </FaFormItem>
         <FaFormItem name="transport" label="设备类型 (transport)" class="col-span-1" required>
@@ -270,11 +270,11 @@ async function onSubmit(): Promise<boolean> {
           />
         </FaFormItem>
 
-        <div class="flex flex-col gap-2 col-span-2">
+        <div class="flex flex-col gap-2 sm:col-span-2">
           <span class="text-sm font-medium">参数 (specs)</span>
-          <div class="gap-3 grid grid-cols-2">
+          <div class="gap-3 grid grid-cols-1 sm:grid-cols-2">
             <template v-for="field in transportFields" :key="field.key">
-              <div v-if="field.type === 'bool'" class="flex gap-3 col-span-2 items-center">
+              <div v-if="field.type === 'bool'" class="flex gap-3 items-center sm:col-span-2">
                 <FaSwitch v-model="extra.specs[field.key]" />
                 <span class="text-sm text-gray-400">{{ field.label }}<span v-if="field.hint">（{{ field.hint }}）</span></span>
               </div>
@@ -295,7 +295,7 @@ async function onSubmit(): Promise<boolean> {
           <span class="text-xs text-gray-400">必填项需填写；其余留空使用默认值（固件约定，见 docs/mqtt-api.md）</span>
         </div>
 
-        <div class="flex gap-3 col-span-2 items-center">
+        <div class="flex gap-3 items-center sm:col-span-2">
           <label class="text-sm font-medium">启用</label>
           <FaSwitch v-model="extra.enabled" />
         </div>

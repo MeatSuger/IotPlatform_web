@@ -265,7 +265,7 @@ async function submitSensor(): Promise<boolean> {
       ref="formRef"
       :model="form"
       :validation-schema="validationSchema"
-      class="gap-3 grid grid-cols-2 min-w-0"
+      class="gap-3 grid grid-cols-1 min-w-0 sm:grid-cols-2"
     >
       <FaFormItem name="id" label="标识 (id)" class="col-span-1" required>
         <FaInput placeholder="如 temperature" :disabled="mode === 'edit'" class="w-full" />
@@ -287,13 +287,13 @@ async function submitSensor(): Promise<boolean> {
         <label class="text-sm font-medium">上报周期 (s)</label>
         <FaInput v-model="extra.reportInterval" type="number" placeholder="0 = 继承设备全局" class="w-full" />
       </div>
-      <div class="flex gap-3 col-span-2 items-center">
+      <div class="flex gap-3 items-center sm:col-span-2">
         <label class="text-sm font-medium">启用</label>
         <FaSwitch v-model="extra.enabled" />
       </div>
 
       <!-- 量程 specs -->
-      <div class="flex flex-col gap-1 col-span-2">
+      <div class="flex flex-col gap-1 sm:col-span-2">
         <span class="text-sm font-medium">量程 (specs)</span>
         <div class="gap-3 grid grid-cols-3">
           <FaInput v-model="extra.specs.min" type="number" placeholder="min" class="w-full" />
@@ -303,7 +303,7 @@ async function submitSensor(): Promise<boolean> {
       </div>
 
       <!-- 告警阈值（统一并入 specs.thresholds） -->
-      <div class="flex flex-col gap-2 col-span-2">
+      <div class="flex flex-col gap-2 sm:col-span-2">
         <span class="text-sm font-medium">告警阈值 (specs.thresholds)</span>
         <div class="gap-3 grid grid-cols-2">
           <FaInput v-model="extra.specThresholds.min" type="number" placeholder="min" class="w-full" />
@@ -316,7 +316,7 @@ async function submitSensor(): Promise<boolean> {
       </div>
 
       <!-- 自由扩展键（统一并入 specs 平铺，原 attrs 能力） -->
-      <div class="flex flex-col gap-2 col-span-2">
+      <div class="flex flex-col gap-2 sm:col-span-2">
         <div class="flex items-center justify-between">
           <span class="text-sm font-medium">扩展键 (specs 内自由键)</span>
           <FaButton variant="outline" size="sm" type="button" @click="addAttrRow">

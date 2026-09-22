@@ -19,6 +19,9 @@ defineOptions({ name: 'DeviceControl' })
 const router = useRouter()
 const route = useRoute()
 
+// 多端适配：窄屏（<1024）或移动 UA 时为 true
+const { isMobile } = useResponsive()
+
 // ==================== WebSocket ====================
 const {
   isConnected: wsConnected,
@@ -51,6 +54,10 @@ const deviceColumns: TableColumn<DeviceRow>[] = [
 const viewMode = ref<'list' | 'detail'>('list')
 const selectedDetail = ref<DeviceDetail | null>(null)
 const detailLoading = ref(false)
+// 是否正在「按 deviceId 直达详情」。
+// 必须在请求发出前同步置位：viewMode 要等接口返回才切成 detail，
+// 否则弱网下会先渲染出设备列表，等详情回来再跳一次（多余的一步）。
+const enteringDetail = ref(false)
 const lastRefreshTime = ref('')
 
 async function fetchDetail(deviceId: string): Promise<DeviceDetail> {
@@ -60,6 +67,7 @@ async function fetchDetail(deviceId: string): Promise<DeviceDetail> {
 }
 
 async function enterDetail(deviceId: string) {
+  enteringDetail.value = true
   detailLoading.value = true
   try {
     selectedDetail.value = await fetchDetail(deviceId)
@@ -72,6 +80,7 @@ async function enterDetail(deviceId: string) {
   }
   finally {
     detailLoading.value = false
+    enteringDetail.value = false
   }
 }
 
@@ -628,7 +637,7 @@ onBeforeUnmount(() => {
     main-class="flex flex-col overflow-hidden! p-4"
   >
     <!-- ==================== 列表视图 ==================== -->
-    <template v-if="viewMode === 'list'">
+    <template v-if="viewMode === 'list' && !enteringDetail">
       <div class="flex shrink-0 items-center justify-between">
         <span class="font-semibold">设备管理</span>
         <div class="text-sm flex gap-3 items-center">
@@ -660,10 +669,14 @@ onBeforeUnmount(() => {
       </div>
     </template>
 
+    <!-- ==================== 详情加载占位 ==================== -->
+    <!-- 直达详情时先占位，避免先闪一屏设备列表再跳到详情 -->
+    <div v-else-if="enteringDetail" v-loading="enteringDetail" element-loading-text="正在加载设备详情" class="min-h-[40vh] w-full" />
+
     <!-- ==================== 详情视图 ==================== -->
     <template v-else>
-      <div class="flex shrink-0 gap-3 items-center justify-between">
-        <div class="flex gap-3 items-center">
+      <div class="flex shrink-0 flex-wrap gap-3 items-center justify-between">
+        <div class="flex flex-wrap gap-3 items-center">
           <FaButton variant="ghost" size="sm" @click="backToList">
             ← 返回列表
           </FaButton>
@@ -694,7 +707,7 @@ onBeforeUnmount(() => {
         <!-- 设备信息 -->
         <FaCard title="设备信息" class="shrink-0">
           <div v-if="selectedDetail" class="flex flex-col gap-2">
-            <FaDescriptions :items="deviceDescriptionItems" :column="4" border />
+            <FaDescriptions :items="deviceDescriptionItems" :column="isMobile ? 1 : 4" border />
             <div class="text-xs text-gray-400">
               创建于 {{ formatTime(selectedDetail.createdAt) }} · 更新于 {{ formatTime(selectedDetail.updatedAt) }}
             </div>
@@ -702,10 +715,10 @@ onBeforeUnmount(() => {
         </FaCard>
 
         <!-- 传感器 + 执行器 -->
-        <div class="flex flex-1 gap-3 min-h-0">
+        <div class="flex flex-1 flex-col gap-3 min-h-0 lg:flex-row">
           <FaCard title="传感器" class="flex-1 min-w-0" content-class="flex-1 min-h-0 overflow-auto">
             <template #header>
-              <div class="flex gap-2 w-full items-center justify-between">
+              <div class="flex flex-wrap gap-2 w-full items-center justify-between">
                 <span>传感器</span>
                 <div class="flex gap-2 items-center">
                   <span v-if="lastRefreshTime" class="text-xs text-gray-400">
@@ -956,7 +969,7 @@ onBeforeUnmount(() => {
                   <!-- led_strip：基础项（颜色色块 + 开关），点击颜色弹出高级调色板（FaPopover） -->
                   <template v-else-if="transportOf(act) === 'led_strip'">
                     <div class="flex gap-2 items-center">
-                      <FaPopover v-model="runtimeState(act).pickerOpen" align="start" class="p-0 w-[360px]" :side-offset="4">
+                      <FaPopover v-model="runtimeState(act).pickerOpen" align="start" class="p-0 w-[min(360px,92vw)]" :side-offset="4">
                         <button
                           class="border border-black/10 rounded-md shrink-0 size-8 cursor-pointer shadow-sm transition-transform dark:border-white/10 disabled:opacity-60 disabled:cursor-not-allowed hover:scale-105"
                           :style="{ backgroundColor: runtimeState(act).colorHex }"

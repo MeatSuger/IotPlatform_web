@@ -26,11 +26,27 @@ interface DeviceRow {
 const router = useRouter()
 const { pagination, getParams, onSizeChange, onCurrentChange } = usePagination()
 
+// 多端适配：isMobile 与框架 body[data-mode] 同源（<1024 或移动 UA 时为 mobile）
+const { isMobile } = useResponsive()
+
 // 表格是否自适应高度
 const tableAutoHeight = ref(true)
 
 // 列表 / 卡片视图切换
-const viewMode = ref<'list' | 'card'>('list')
+// 用户显式切换过就记忆；没切换过则跟随屏幕（手机上默认卡片视图，表格在窄屏下不可读）
+const viewModeStorageKey = 'iot_device_list_view_mode'
+function readSavedViewMode(): 'list' | 'card' | '' {
+  const saved = localStorage.getItem(viewModeStorageKey)
+  return saved === 'list' || saved === 'card' ? saved : ''
+}
+const savedViewMode = ref<'list' | 'card' | ''>(readSavedViewMode())
+const viewMode = computed<'list' | 'card'>({
+  get: () => savedViewMode.value || (isMobile.value ? 'card' : 'list'),
+  set: (value) => {
+    savedViewMode.value = value
+    localStorage.setItem(viewModeStorageKey, value)
+  },
+})
 
 // 搜索
 const searchDefault = {
@@ -71,7 +87,8 @@ function normalize(row: any): DeviceRow {
 }
 
 const tableColumns = computed<TableColumn<DeviceRow>[]>(() => [
-  ...(batch.value.enable
+  // 移动端单屏放不下固定列（会吃掉整屏宽度），且没有悬停多选场景，直接不渲染
+  ...(batch.value.enable && !isMobile.value
     ? [{
       type: 'selection',
       fixed: 'left',
@@ -90,7 +107,7 @@ const tableColumns = computed<TableColumn<DeviceRow>[]>(() => [
     header: '操作',
     width: 100,
     align: 'center',
-    fixed: 'right',
+    fixed: isMobile.value ? undefined : 'right',
   },
 ])
 
@@ -231,7 +248,7 @@ onActivated(() => {
     <FaPageMain :class="{ 'flex-1 overflow-auto': tableAutoHeight }" :main-class="{ 'flex-1 flex flex-col overflow-auto': tableAutoHeight }">
       <FaSearchBar :show-toggle="false">
         <template #default="{ fold, toggle }">
-          <div class="gap-x-8 gap-y-2 grid grid-cols-[repeat(auto-fit,minmax(300px,1fr))]">
+          <div class="gap-x-8 gap-y-2 grid grid-cols-1 lg:grid-cols-[repeat(auto-fit,minmax(300px,1fr))]">
             <FaLabel label="设备名称" class="col-span-1">
               <FaInput
                 v-model="search.devicename"
@@ -260,13 +277,13 @@ onActivated(() => {
       </FaSearchBar>
       <div class="mx--4 my-3 border-t border-t-dashed" />
       <!-- 顶部操作栏：列表/卡片切换 始终可见 -->
-      <div class="mb-3 flex gap-2 items-center justify-between">
+      <div class="mb-3 flex flex-wrap gap-2 items-center justify-between">
         <div class="flex gap-2 items-center">
           <FaButton @click="onCreate">
             新增
           </FaButton>
           <FaDropdown
-            v-if="batch.enable && viewMode === 'list'"
+            v-if="batch.enable && !isMobile && viewMode === 'list'"
             :items="[
               [
                 { label: '批量删除', variant: 'destructive', disabled: !batch.selectionDataList.length, handle: onBatchDel },
@@ -297,7 +314,7 @@ onActivated(() => {
         <FaTable
           v-loading="loading"
           table-root-class="rounded-lg overflow-hidden"
-          table-class="table-fixed"
+          :table-class="isMobile ? undefined : 'table-fixed'"
           :class="{ 'min-h-0 flex-1': tableAutoHeight }"
           row-key="id"
           selectable
@@ -420,7 +437,7 @@ onActivated(() => {
           </FaCard>
         </div>
       </template>
-      <FaPagination :page="pagination.page" :size="pagination.size" :total="pagination.total" class="mt-2" @page-change="currentChange" @size-change="sizeChange" />
+      <AppPagination :page="pagination.page" :size="pagination.size" :total="pagination.total" class="mt-2" @page-change="currentChange" @size-change="sizeChange" />
     </FaPageMain>
     <DeviceEditDialog
       v-if="editingDevice"

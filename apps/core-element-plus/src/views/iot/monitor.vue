@@ -8,6 +8,9 @@ import { useAppSettingsStore } from '@/store/modules/app/settings'
 
 defineOptions({ name: 'Monitor' })
 
+// 多端适配：窄屏（<1024）或移动 UA 时为 true
+const { isMobile } = useResponsive()
+
 // ==================== 查询条件 ====================
 const query = reactive({
   deviceId: '',
@@ -128,7 +131,8 @@ const tzInfo = (() => {
 })()
 
 const columns: TableColumn<any>[] = [
-  { accessorKey: 'timestamp', header: '时间（当地时间）' },
+  // enableHiding: false —— 唯一不可隐藏的列，避免用户把列全关掉后看到空表格
+  { accessorKey: 'timestamp', header: '时间（当地时间）', enableHiding: false },
   { accessorKey: 'name', header: '名称' },
   { accessorKey: 'type', header: '类型', align: 'center' },
   { accessorKey: 'value', header: '数值', align: 'center' },
@@ -270,7 +274,16 @@ const timeAxis = computed(() => {
   const xs = Array.from(new Set(filteredData.value.map((d: any) => d.timestamp ?? d.time ?? d.date ?? ''))) as string[]
   return xs.sort((a, b) => parseDateSafe(a) - parseDateSafe(b))
 })
-const seriesKeys = computed(() => Array.from(new Set(filteredData.value.map((d: any) => d.type || d.name || 'value'))))
+
+// 系列标识：优先 name（= 物模型定义 id，固件上报契约），回退 type。
+// 不能只按 type 分组 —— 同一 type 下可能有多个传感器（如 gpu_temperature /
+// soc_temperature / aht20_temperature 的 type 都是 temperature），按 type 会把
+// 它们揉成一条线，且每个时间点只取到其中一个的值 → 曲线数值乱跳。
+function seriesKeyOf(d: any): string {
+  return String(d.name || d.type || 'value')
+}
+
+const seriesKeys = computed(() => Array.from(new Set(filteredData.value.map(seriesKeyOf))))
 
 const chartOption = computed(() => {
   const xData = timeAxis.value
@@ -280,7 +293,7 @@ const chartOption = computed(() => {
     type: 'line' as const,
     smooth: true,
     data: xData.map((t) => {
-      const hit = filteredData.value.find((d: any) => (d.type || d.name) === key && (d.timestamp ?? d.time ?? d.date ?? '') === t)
+      const hit = filteredData.value.find((d: any) => seriesKeyOf(d) === key && (d.timestamp ?? d.time ?? d.date ?? '') === t)
       return hit ? toNumber((hit as any).value) : null
     }),
     showSymbol: false,
@@ -291,24 +304,35 @@ const chartOption = computed(() => {
       axisPointer: {
         type: 'cross',
         label: {
-          backgroundColor: '#6a7985',
+          // 十字准星的 X/Y 两个轴标签共用这个 formatter：
+          //   - X 轴是时间分类值（字符串）→ 转本地时间显示
+          //   - Y 轴是数值 → 必须原样显示数值
+          // 否则 36.111 会被 parseBackendTime 当成 epoch 毫秒，显示成 1970 年
+          // （表现为“时间和数值反了”，而这里该看的是数值）。
           formatter: (params: any) => {
-            const d = parseBackendTime(params?.value)
-            return d ? d.toLocaleString() : String(params?.value ?? '')
+            const v = params?.value
+            if (typeof v !== 'string') {
+              return v == null ? '' : String(v)
+            }
+            const d = parseBackendTime(v)
+            return d ? d.toLocaleString() : v
           },
         },
       },
       // 时间按浏览器本地时区展示（后端存 UTC）
+      // 排序：数值在上（要看的重点），时间作为次要信息放在最后
       formatter: (params: any) => {
-        const list = Array.isArray(params) ? params : [params]
-        const first = list[0]
-        const d = parseBackendTime(first?.axisValue ?? first?.name)
-        const header = d ? d.toLocaleString() : String(first?.axisValue ?? '')
+        const list = (Array.isArray(params) ? params : [params]).filter((p: any) => p?.value != null)
         const rows = list
-          .filter((p: any) => p?.value != null)
-          .map((p: any) => `${p.marker ?? ''} ${typeMap[p.seriesName] || p.seriesName}：${p.value}`)
+          .map((p: any) => `${p.marker ?? ''} ${typeMap[p.seriesName] || p.seriesName}：<b>${p.value}</b>`)
           .join('<br/>')
-        return `<div style="font-weight: 600">${header}</div>${rows ? `<br/>${rows}` : ''}`
+
+        const first = (Array.isArray(params) ? params : [params])[0]
+        const d = parseBackendTime(first?.axisValue ?? first?.name)
+        const time = d ? d.toLocaleString() : String(first?.axisValue ?? '')
+
+        const body = rows || '<i>该时刻无数据</i>'
+        return `${body}<div style="margin-top:4px;font-size:12px;opacity:.65">${time}</div>`
       },
     },
     legend: {
@@ -427,7 +451,7 @@ watch(chartOption, (option) => {
       <!-- 查询区 -->
       <FaSearchBar :show-toggle="false" class="shrink-0">
         <template #default>
-          <div class="gap-x-8 gap-y-2 grid grid-cols-[repeat(auto-fit,minmax(280px,1fr))] items-end">
+          <div class="gap-x-8 gap-y-2 grid grid-cols-1 items-end lg:grid-cols-[repeat(auto-fit,minmax(min(100%,280px),1fr))]">
             <FaLabel label="设备ID">
               <FaInput
                 v-model="query.deviceId"
@@ -500,7 +524,7 @@ watch(chartOption, (option) => {
           </div>
         </template>
         <div class="table-wrapper flex-1 min-h-0 overflow-auto">
-          <FaTable :columns="columns" :data="tablePageData" stripe border>
+          <FaTable :columns="columns" :data="tablePageData" stripe border :column-visibility="isMobile">
             <template #cell-timestamp="{ value }">
               {{ formatTime(value) }}
             </template>
@@ -515,7 +539,7 @@ watch(chartOption, (option) => {
           </FaTable>
         </div>
         <div class="pagination-wrap shrink-0">
-          <FaPagination
+          <AppPagination
             v-model:page="currentPage" v-model:size="pageSize" :total="tableTotal"
             :sizes="[10, 20, 50, 100]" @page-change="onPageChange" @size-change="onPageSizeChange"
           />
@@ -535,7 +559,15 @@ watch(chartOption, (option) => {
 
 .chart {
   width: 100%;
-  height: 280px;
+
+  /* 手机上 280px 固定高度会把表格挤到屏幕外 */
+  height: 220px;
+}
+
+@media (width >= 1024px) {
+  .chart {
+    height: 280px;
+  }
 }
 
 .table-wrapper {

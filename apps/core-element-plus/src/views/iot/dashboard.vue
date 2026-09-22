@@ -39,7 +39,7 @@ function initCharts() {
   trendChart.setOption({
     tooltip: { trigger: 'axis' },
     legend: { data: ['温度', '湿度'], top: 8 },
-    grid: { left: '3%', right: '4%', bottom: '3%', top: 40, containLabel: true },
+    grid: { left: '3%', right: '4%', bottom: '3%', top: 56, containLabel: true },
     xAxis: {
       type: 'category',
       boundaryGap: false,
@@ -131,10 +131,10 @@ onBeforeUnmount(() => {
     <!-- 图表 + 最新上报 -->
     <div class="gap-3 grid grid-cols-1 md:grid-cols-3">
       <FaCard title="近 7 天温湿度趋势" class="md:col-span-2">
-        <div ref="trendChartRef" class="h-[320px] w-full" />
+        <div ref="trendChartRef" class="h-64 w-full lg:h-80" />
       </FaCard>
       <FaCard title="设备类型分布">
-        <div ref="typeChartRef" class="h-[320px] w-full" />
+        <div ref="typeChartRef" class="h-64 w-full lg:h-80" />
       </FaCard>
       <FaCard title="最新上报" class="md:col-span-3">
         <FaTable :columns="recentColumns" :data="recentData" stripe border />

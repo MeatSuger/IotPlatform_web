@@ -10,6 +10,9 @@ defineOptions({
 const route = useRoute()
 const router = useRouter()
 
+// 多端适配：窄屏（<1024）或移动 UA 时为 true
+const { isMobile } = useResponsive()
+
 const deviceId = ref(String(route.query.deviceId ?? ''))
 
 // 搜索/筛选（注意：Reka Select 不允许空字符串 value，「全部」用 placeholder 表示）
@@ -38,7 +41,8 @@ const typeMap: Record<string, string> = {
 }
 
 const columns = computed<TableColumn<DeviceLogItem>[]>(() => [
-  { accessorKey: 'createdAt', header: '时间', width: 190 },
+  // enableHiding: false —— 唯一不可隐藏的列，避免用户把列全关掉后看到空表格
+  { accessorKey: 'createdAt', header: '时间', width: 190, enableHiding: false },
   { accessorKey: 'type', header: '类型', width: 90, align: 'center' },
   { accessorKey: 'deviceId', header: '设备ID', width: 120 },
   { accessorKey: 'content', header: '内容' },
@@ -137,7 +141,7 @@ watch(() => route.query.deviceId, (val) => {
     <FaPageMain>
       <FaSearchBar :show-toggle="false">
         <template #default>
-          <div class="gap-x-8 gap-y-2 grid grid-cols-[repeat(auto-fit,minmax(300px,1fr))] items-end">
+          <div class="gap-x-8 gap-y-2 grid grid-cols-1 items-end lg:grid-cols-[repeat(auto-fit,minmax(300px,1fr))]">
             <FaLabel label="事件类型" class="col-span-1">
               <FaSelect v-model="search.type" :options="typeOptions" placeholder="全部类型" class="w-full" />
             </FaLabel>
@@ -159,6 +163,7 @@ watch(() => route.query.deviceId, (val) => {
         row-key="id"
         stripe
         border
+        :column-visibility="isMobile"
         :columns="columns"
         :data="dataList"
       >
@@ -174,7 +179,7 @@ watch(() => route.query.deviceId, (val) => {
           <span class="text-xs text-gray-500 font-mono">{{ value || '-' }}</span>
         </template>
       </FaTable>
-      <FaPagination
+      <AppPagination
         :page="currentPage"
         :size="pageSize"
         :total="total"

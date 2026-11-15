@@ -108,12 +108,7 @@ onBeforeUnmount(() => {
 
 <template>
   <FaPageMain>
-    <FaCard class="mb-3">
-      <div class="dashboard-page">
-        <h1>欢迎来到仪表盘</h1>
-        <p>这里是您的管理面板的概览。</p>
-      </div>
-    </FaCard>
+    <FaCard title="欢迎来到仪表盘" description="这里是您的管理面板的概览。" class="mb-3" />
 
     <!-- 指标卡片 -->
     <div class="mb-3 gap-3 grid grid-cols-2 sm:grid-cols-4">

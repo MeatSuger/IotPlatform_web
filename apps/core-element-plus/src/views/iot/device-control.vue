@@ -192,7 +192,7 @@ const sensorColumns: TableColumn<DisplaySensor>[] = [
   {
     id: 'sensorMore',
     header: '操作',
-    width: 60,
+    width: 88,
     align: 'center',
   },
 ]
@@ -801,19 +801,28 @@ onBeforeUnmount(() => {
                   </FaTag>
                 </template>
                 <template #cell-sensorMore="{ row }">
-                  <FaDropdown
-                    :items="[
-                      [
-                        { label: '显示', handle: () => goSensorMonitor(row.original) },
-                        { label: '编辑', handle: () => openEditSensorDialog(row.original) },
-                        { label: '删除', variant: 'destructive', handle: () => removeSensor(row.original) },
-                      ],
-                    ]"
-                  >
-                    <FaButton variant="outline" size="icon-sm">
-                      <FaIcon name="i-ri:more-2-fill" />
+                  <div class="flex gap-1 items-center justify-center">
+                    <FaButton
+                      variant="outline"
+                      size="icon-sm"
+                      title="查看数据监控"
+                      @click="goSensorMonitor(row.original)"
+                    >
+                      <FaIcon name="i-ri:line-chart-line" />
                     </FaButton>
-                  </FaDropdown>
+                    <FaDropdown
+                      :items="[
+                        [
+                          { label: '编辑', handle: () => openEditSensorDialog(row.original) },
+                          { label: '删除', variant: 'destructive', handle: () => removeSensor(row.original) },
+                        ],
+                      ]"
+                    >
+                      <FaButton variant="outline" size="icon-sm">
+                        <FaIcon name="i-ri:more-2-fill" />
+                      </FaButton>
+                    </FaDropdown>
+                  </div>
                 </template>
               </FaTable>
               <el-empty v-else description="无传感器数据" />
@@ -837,10 +846,17 @@ onBeforeUnmount(() => {
                       <FaTag variant="secondary">
                         {{ sensor.type || '-' }}
                       </FaTag>
+                      <FaButton
+                        variant="ghost"
+                        size="icon-sm"
+                        title="查看数据监控"
+                        @click="goSensorMonitor(sensor)"
+                      >
+                        <FaIcon name="i-ri:line-chart-line" />
+                      </FaButton>
                       <FaDropdown
                         :items="[
                           [
-                            { label: '显示', handle: () => goSensorMonitor(sensor) },
                             { label: '编辑', handle: () => openEditSensorDialog(sensor) },
                             { label: '删除', variant: 'destructive', handle: () => removeSensor(sensor) },
                           ],
@@ -988,8 +1004,10 @@ onBeforeUnmount(() => {
                   <template v-else-if="transportOf(act) === 'led_strip'">
                     <div class="flex gap-2 items-center">
                       <FaPopover v-model="runtimeState(act).pickerOpen" align="start" class="p-0 w-[min(360px,92vw)]" :side-offset="4">
-                        <button
-                          class="border border-black/10 rounded-md shrink-0 size-8 cursor-pointer shadow-sm transition-transform dark:border-white/10 disabled:opacity-60 disabled:cursor-not-allowed hover:scale-105"
+                        <FaButton
+                          variant="outline"
+                          size="icon-sm"
+                          class="shrink-0 transition-transform hover:scale-105"
                           :style="{ backgroundColor: runtimeState(act).colorHex }"
                           :disabled="actuatorCmdBusy === act.id"
                           title="点击打开调色板"
@@ -1022,15 +1040,17 @@ onBeforeUnmount(() => {
                   <template v-else-if="transportOf(act) === 'epd'">
                     <div class="flex gap-2 items-center">
                       <FaPopover v-model="runtimeState(act).pickerOpen" align="start" class="p-0" :side-offset="4">
-                        <button
-                          class="text-sm px-3 border border-black/10 rounded-md flex gap-1.5 h-8 cursor-pointer shadow-sm transition-transform items-center dark:border-white/10 disabled:opacity-60 disabled:cursor-not-allowed hover:scale-105"
+                        <FaButton
+                          variant="outline"
+                          size="sm"
+                          class="transition-transform hover:scale-105"
                           :disabled="actuatorCmdBusy === act.id"
                           title="打开投图面板"
                           aria-label="打开投图面板"
                         >
-                          <FaIcon name="i-ri:image-add-line" class="size-4" />
+                          <FaIcon name="i-ri:image-add-line" />
                           投图
-                        </button>
+                        </FaButton>
                         <template #panel>
                           <EpdImagePicker
                             :device-id="selectedDetail?.deviceId ?? ''"

@@ -61,7 +61,7 @@ export const epdColorDepthLabels: Record<EpdColorDepth, string> = {
 // 常见面板预设：选择已知芯片时表单自动带出屏幕尺寸/分辨率与默认色深
 export const epdChipPresets: Record<string, { label: string, sizeInch: number, width: number, height: number, colorDepth: EpdColorDepth }> = {
   ssd1683: { label: 'SSD1683 4.2" BWR', sizeInch: 4.2, width: 400, height: 300, colorDepth: 'bwr' },
-  jd79665: { label: 'JD79665 7.5" BWRY', sizeInch: 7.5, width: 768, height: 552, colorDepth: 'bwry' },
+  jd79665: { label: 'JD79665 3.98" BWRY', sizeInch: 3.98, width: 768, height: 552, colorDepth: 'bwry' },
 }
 
 // 屏幕尺寸下拉预设：0.96" ~ 7.5" 通用嵌入式面板（OLED/LCD/EPD）
@@ -72,6 +72,9 @@ export interface EpdScreenPreset {
   width: number
   height: number
   label: string
+  // 可选：选中该分辨率时一并写入的芯片/色深（用于已知面板型号）
+  chip?: string
+  colorDepth?: EpdColorDepth
 }
 
 const epdScreenPresetDefs: Array<Omit<EpdScreenPreset, 'key'>> = [
@@ -93,15 +96,14 @@ const epdScreenPresetDefs: Array<Omit<EpdScreenPreset, 'key'>> = [
   { inch: 3.2, width: 320, height: 240, label: '3.2 英寸 · 320×240 · TFT' },
   { inch: 3.5, width: 320, height: 480, label: '3.5 英寸 · 320×480 · TFT' },
   { inch: 3.7, width: 480, height: 280, label: '3.7 英寸 · 480×280 · EPD' },
-  { inch: 3.89, width: 768, height: 552, label: '3.89 英寸 · 768×552 · EPD 四色' },
+  { inch: 3.98, width: 768, height: 552, label: '3.98 英寸 · 768×552 · EPD 四色', chip: 'jd79665', colorDepth: 'bwry' },
   { inch: 4.0, width: 320, height: 480, label: '4.0 英寸 · 320×480 · TFT' },
   { inch: 4.0, width: 480, height: 800, label: '4.0 英寸 · 480×800 · IPS' },
-  { inch: 4.2, width: 400, height: 300, label: '4.2 英寸 · 400×300 · EPD 三色' },
+  { inch: 4.2, width: 400, height: 300, label: '4.2 英寸 · 400×300 · EPD 三色', chip: 'ssd1683', colorDepth: 'bwr' },
   { inch: 5.0, width: 800, height: 480, label: '5.0 英寸 · 800×480 · IPS' },
   { inch: 5.83, width: 648, height: 480, label: '5.83 英寸 · 648×480 · EPD' },
   { inch: 7.0, width: 1024, height: 600, label: '7.0 英寸 · 1024×600 · IPS' },
   { inch: 7.5, width: 640, height: 384, label: '7.5 英寸 · 640×384 · EPD 四色' },
-  { inch: 7.5, width: 768, height: 552, label: '7.5 英寸 · 768×552 · EPD 四色' },
   { inch: 7.5, width: 800, height: 480, label: '7.5 英寸 · 800×480 · EPD' },
 ]
 
@@ -140,12 +142,12 @@ export const ACTUATOR_TRANSPORT_FIELDS: Record<ActuatorTransport, TransportConfi
   // 墨水屏：显示参数随定义下发（图片经 MQTT 直发，见 EpdImagePicker.vue）
   // 基础区只留色深；显示大小（宽高）与显示芯片属面板硬件参数，收进高级选项
   epd: [
-    { key: 'color_depth', label: '色深 / 配色', type: 'select', required: true, default: 'bwr', options: epdColorDepths.map(value => ({ label: epdColorDepthLabels[value], value })) },
+    { key: 'color_depth', label: '色深 / 配色', type: 'select', required: true, default: 'bwry', options: epdColorDepths.map(value => ({ label: epdColorDepthLabels[value], value })) },
     // size_inch 由基础区「屏幕尺寸」下拉写入；自定义尺寸时也可在此直接改
-    { key: 'size_inch', label: '屏幕尺寸（自定义）', type: 'number', required: true, default: '4.2', unit: '英寸', advanced: true },
-    { key: 'chip', label: '显示芯片', type: 'text', required: true, default: 'ssd1683', hint: '如 ssd1683 / jd79665', advanced: true },
-    { key: 'width', label: '显示宽度', type: 'number', required: true, default: '400', unit: 'px', hint: '8 的倍数', advanced: true },
-    { key: 'height', label: '显示高度', type: 'number', required: true, default: '300', unit: 'px', advanced: true },
+    { key: 'size_inch', label: '屏幕尺寸（自定义）', type: 'number', required: true, default: '3.98', unit: '英寸', advanced: true },
+    { key: 'chip', label: '显示芯片', type: 'text', required: true, default: 'jd79665', hint: '如 jd79665 / ssd1683', advanced: true },
+    { key: 'width', label: '显示宽度', type: 'number', required: true, default: '768', unit: 'px', hint: '8 的倍数', advanced: true },
+    { key: 'height', label: '显示高度', type: 'number', required: true, default: '552', unit: 'px', advanced: true },
   ],
 }
 

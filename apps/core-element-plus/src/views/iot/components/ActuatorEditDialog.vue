@@ -130,10 +130,23 @@ const epdCascaderValue = computed<string[]>({
   },
 })
 
+// 固件 display_check_cfg 会把 width/height/chip/color_depth 与探测到的面板逐项比对，
+// 任一不符整块墨水屏都加载失败 → 换预设必须连面板标识一起改，不能只改分辨率。
 function applyEpdPreset(preset: (typeof epdScreenPresets)[number]) {
   extra.specs.size_inch = String(preset.inch)
   extra.specs.width = String(preset.width)
   extra.specs.height = String(preset.height)
+  // 已知面板型号：带出芯片与色深
+  if (preset.chip) {
+    extra.specs.chip = preset.chip
+  }
+  else {
+    // 通用面板：清掉上一条预设残留的芯片，避免「新分辨率 + 旧芯片」的非法组合
+    delete extra.specs.chip
+  }
+  if (preset.colorDepth) {
+    extra.specs.color_depth = preset.colorDepth
+  }
 }
 
 function onEpdCascaderChange(value: unknown) {
@@ -157,8 +170,8 @@ function onEpdCascaderChange(value: unknown) {
   }
   epdCustomMode.value = false
   applyEpdPreset(preset)
-  // 选中预设尺寸后收起自定义参数
-  showAdvancedSpecs.value = false
+  // 预设未带出芯片时必须保留高级区：chip 是必填项，收起后用户既看不到也改不了
+  showAdvancedSpecs.value = !preset.chip
 }
 
 // 编辑中的旧版定义（specs 无 transport 字段）提示升级

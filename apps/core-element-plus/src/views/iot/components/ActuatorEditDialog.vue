@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import type { FormExpose } from '@fantastic-admin/components'
 import type { Actuator, ActuatorCreatePayload, ActuatorDriver, ActuatorTransport, ActuatorUpdatePayload } from '@/api/modules/iot/actuator'
+// 显式导入：避免 dev server 在 resolver 列表热更新前把 <FaCascader> 解析为空
+import { FaCascader } from '@fantastic-admin/components'
 import { toTypedSchema } from '@vee-validate/zod'
 import * as z from 'zod'
-import { ACTUATOR_TRANSPORT_FIELDS, actuatorApi, actuatorDrivers, actuatorTransportLabels, actuatorTransports } from '@/api/modules/iot/actuator'
+import { ACTUATOR_TRANSPORT_FIELDS, actuatorApi, actuatorDrivers, actuatorTransportLabels, actuatorTransports, epdChipPresets, epdScreenPresets } from '@/api/modules/iot/actuator'
+import ActuatorSpecField from './ActuatorSpecField.vue'
 
 defineOptions({
   name: 'ActuatorEditDialog',
@@ -64,6 +67,99 @@ const transportOptions = actuatorTransports.map(transport => ({
 // 当前 transport 的字段定义（驱动弹窗渲染与提交转换）
 // ?? [] 兜底：字段表缺失时渲染为空字段，而不是让 for...of 抛错导致表单/下拉异常
 const transportFields = computed(() => ACTUATOR_TRANSPORT_FIELDS[form.transport] ?? [])
+// 基础区只渲染常用字段；advanced 字段由代码控制显隐（选中自定义时展开）
+const basicTransportFields = computed(() => transportFields.value.filter(field => !field.advanced))
+const advancedTransportFields = computed(() => transportFields.value.filter(field => field.advanced))
+const showAdvancedSpecs = ref(false)
+
+// EPD 屏幕尺寸：级联选择器（一级英寸 / 自定义，二级分辨率）
+// 选中分辨率后把 size_inch / width / height 一起写入 specs
+const epdCustomMode = ref(false)
+const epdInches = computed(() => [...new Set(epdScreenPresets.map(preset => preset.inch))])
+
+// 整数英寸补一位小数（2 → 2.0），其余保留原值（0.96 / 4.2 / 7.5）
+function formatInch(inch: number): string {
+  return inch % 1 === 0 ? inch.toFixed(1) : String(inch)
+}
+
+function presetKind(preset: { label: string }): string {
+  const parts = preset.label.split('·')
+  return parts[parts.length - 1]?.trim() ?? ''
+}
+
+const epdCascaderOptions = computed(() => [
+  ...epdInches.value.map(inch => ({
+    value: String(inch),
+    label: `${formatInch(inch)} 英寸`,
+    children: epdScreenPresets
+      .filter(preset => preset.inch === inch)
+      .map(preset => ({
+        value: preset.key,
+        label: `${preset.width}×${preset.height} · ${presetKind(preset)}`,
+      })),
+  })),
+  { value: 'custom', label: '自定义（手动填写尺寸）' },
+])
+
+const epdSelectedInch = computed<number | 'custom'>(() => {
+  const inch = Number(extra.specs.size_inch)
+  return !epdCustomMode.value && epdInches.value.includes(inch) ? inch : 'custom'
+})
+
+const epdSelectedResolutionKey = computed(() => {
+  const inch = Number(extra.specs.size_inch)
+  const width = Number(extra.specs.width)
+  const height = Number(extra.specs.height)
+  return epdScreenPresets.find(preset =>
+    preset.inch === inch && preset.width === width && preset.height === height,
+  )?.key ?? ''
+})
+
+const epdCascaderValue = computed<string[]>({
+  get() {
+    if (epdSelectedInch.value === 'custom') {
+      return ['custom']
+    }
+    const inch = String(epdSelectedInch.value)
+    return epdSelectedResolutionKey.value
+      ? [inch, epdSelectedResolutionKey.value]
+      : [inch]
+  },
+  set(path) {
+    onEpdCascaderChange(path)
+  },
+})
+
+function applyEpdPreset(preset: (typeof epdScreenPresets)[number]) {
+  extra.specs.size_inch = String(preset.inch)
+  extra.specs.width = String(preset.width)
+  extra.specs.height = String(preset.height)
+}
+
+function onEpdCascaderChange(value: unknown) {
+  const path = Array.isArray(value)
+    ? value.map(item => String(item))
+    : (value != null ? [String(value)] : [])
+  if (path.length === 0 || path[0] === 'custom') {
+    epdCustomMode.value = true
+    // 自定义需要手填英寸/宽高，自动展开高级选项
+    showAdvancedSpecs.value = true
+    return
+  }
+  const inch = Number(path[0])
+  const key = path[1]
+  const preset = (key ? epdScreenPresets.find(item => item.key === key) : undefined)
+    ?? epdScreenPresets.find(item => item.inch === inch)
+  if (!preset) {
+    epdCustomMode.value = true
+    showAdvancedSpecs.value = true
+    return
+  }
+  epdCustomMode.value = false
+  applyEpdPreset(preset)
+  // 选中预设尺寸后收起自定义参数
+  showAdvancedSpecs.value = false
+}
 
 // 编辑中的旧版定义（specs 无 transport 字段）提示升级
 const editingLegacyActuator = ref(false)
@@ -76,6 +172,7 @@ const validationSchema = toTypedSchema(z.object({
 }))
 
 function resetConfigFields() {
+  showAdvancedSpecs.value = false
   Object.keys(extra.specs).forEach((key) => {
     delete extra.specs[key]
   })
@@ -89,9 +186,11 @@ function resetConfigFields() {
       extra.specs[field.key] = true
     }
   }
+  epdCustomMode.value = false
 }
 
 function prefill() {
+  showAdvancedSpecs.value = false
   if (props.mode === 'edit' && props.actuator) {
     const act = props.actuator
     form.id = act.id
@@ -112,6 +211,10 @@ function prefill() {
           : String(specsMap[field.key])
       }
     }
+    // 存量自定义尺寸（不匹配任何预设）自动展开，便于直接修改
+    if (form.transport === 'epd') {
+      showAdvancedSpecs.value = !epdSelectedResolutionKey.value
+    }
   }
   else {
     form.id = ''
@@ -129,6 +232,23 @@ watch(() => form.transport, () => {
   if (props.mode === 'add') {
     resetConfigFields()
   }
+})
+
+// EPD：新增时填写已知芯片型号 → 自动带出对应分辨率与默认色深
+watch(() => extra.specs.chip, (chip) => {
+  if (props.mode !== 'add' || form.transport !== 'epd') {
+    return
+  }
+  const preset = epdChipPresets[String(chip ?? '').toLowerCase()]
+  if (!preset) {
+    return
+  }
+  extra.specs.size_inch = String(preset.sizeInch)
+  extra.specs.width = String(preset.width)
+  extra.specs.height = String(preset.height)
+  extra.specs.color_depth = preset.colorDepth
+  epdCustomMode.value = false
+  showAdvancedSpecs.value = false
 })
 
 watch(() => props.modelValue, (val) => {
@@ -178,6 +298,18 @@ async function onSubmit(): Promise<boolean> {
         const num = Number(sel)
         specs[field.key] = Number.isNaN(num) ? sel : num
       }
+      continue
+    }
+    if (field.type === 'text') {
+      const text = String(raw ?? '').trim()
+      if (text === '') {
+        if (field.required) {
+          useFaToast().warning(`${field.label} 为必填`)
+          return false
+        }
+        continue
+      }
+      specs[field.key] = text
       continue
     }
     const trimmed = String(raw ?? '').trim()
@@ -260,10 +392,7 @@ async function onSubmit(): Promise<boolean> {
         <FaFormItem name="transport" label="设备类型 (transport)" class="col-span-1" required>
           <FaSelect :options="transportOptions" class="w-full" />
         </FaFormItem>
-        <FaFormItem
-          name="driver" label="兼容标识 (driver)" class="col-span-1" required
-          description="后端枚举占位（led/servo/speaker），固件忽略，仅需通过后端校验"
-        >
+        <FaFormItem name="driver" label="兼容标识 (driver)" class="col-span-1" required>
           <FaSelect
             :options="driverOptions"
             :disabled="mode === 'edit'" class="w-full"
@@ -273,26 +402,39 @@ async function onSubmit(): Promise<boolean> {
         <div class="flex flex-col gap-2 sm:col-span-2">
           <span class="text-sm font-medium">参数 (specs)</span>
           <div class="gap-3 grid grid-cols-1 sm:grid-cols-2">
-            <template v-for="field in transportFields" :key="field.key">
-              <div v-if="field.type === 'bool'" class="flex gap-3 items-center sm:col-span-2">
-                <FaSwitch v-model="extra.specs[field.key]" />
-                <span class="text-sm text-gray-400">{{ field.label }}<span v-if="field.hint">（{{ field.hint }}）</span></span>
-              </div>
-              <div v-else-if="field.type === 'select'" class="flex flex-col gap-1">
-                <label class="text-sm text-gray-400">{{ field.label }}<span v-if="field.required"> *</span></label>
-                <FaSelect v-model="extra.specs[field.key]" :options="field.options ?? []" class="w-full" />
-              </div>
-              <div v-else class="flex flex-col gap-1">
-                <label class="text-sm text-gray-400">{{ field.label }}<span v-if="field.required"> *</span></label>
-                <FaInput v-model="extra.specs[field.key]" type="number" :placeholder="field.hint ?? '默认值'">
-                  <template v-if="field.unit" #end>
-                    <span class="text-xs text-gray-400">{{ field.unit }}</span>
-                  </template>
-                </FaInput>
-              </div>
-            </template>
+            <ActuatorSpecField
+              v-for="field in basicTransportFields"
+              :key="field.key"
+              v-model="extra.specs[field.key]"
+              :field="field"
+            />
+            <!-- EPD：级联选择（一级英寸/自定义，二级分辨率），选中后写入 size_inch/width/height -->
+            <div v-if="form.transport === 'epd'" class="flex flex-col gap-1">
+              <label class="text-sm text-gray-400">屏幕尺寸</label>
+              <FaCascader
+                v-model="epdCascaderValue"
+                :options="epdCascaderOptions"
+                separator="/"
+                placeholder="选择尺寸与分辨率"
+                class="w-full"
+              />
+              <span v-if="epdSelectedInch === 'custom'" class="text-xs text-gray-400">
+                自定义尺寸请填写下方的英寸、宽度与高度
+              </span>
+            </div>
           </div>
-          <span class="text-xs text-gray-400">必填项需填写；其余留空使用默认值（固件约定，见 docs/mqtt-api.md）</span>
+          <!-- 高级参数由代码控制显隐（选「自定义」时自动展开），不提供手动开关 -->
+          <div
+            v-if="showAdvancedSpecs && advancedTransportFields.length"
+            class="pt-2 gap-3 grid grid-cols-1 sm:col-span-2 sm:grid-cols-2"
+          >
+            <ActuatorSpecField
+              v-for="field in advancedTransportFields"
+              :key="field.key"
+              v-model="extra.specs[field.key]"
+              :field="field"
+            />
+          </div>
         </div>
 
         <div class="flex gap-3 items-center sm:col-span-2">

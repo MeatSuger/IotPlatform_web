@@ -12,6 +12,7 @@ const BASIC_COMPONENT_NAMES = [
   'FaButton',
   'FaButtonGroup',
   'FaCard',
+  'FaCascader',
   'FaCheckbox',
   'FaCheckboxGroup',
   'FaCollapsible',

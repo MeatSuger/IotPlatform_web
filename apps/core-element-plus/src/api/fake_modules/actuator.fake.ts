@@ -42,6 +42,13 @@ const actuatorTemplates: ActuatorRecord[] = [
     specs: { transport: 'spi', clk: 6, mosi: 7, cs: 10, freq_hz: 1000000, mode: 0 },
     enabled: true,
   },
+  {
+    id: 'epd',
+    name: '板载墨水屏',
+    driver: 'led',
+    specs: { transport: 'epd', size_inch: 4.2, width: 400, height: 300, chip: 'ssd1683', color_depth: 'bwr' },
+    enabled: true,
+  },
 ]
 
 // 每台设备一份执行器定义（会话内可增删改）

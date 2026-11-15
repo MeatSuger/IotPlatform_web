@@ -1,17 +1,19 @@
 <script setup lang="ts">
 import type { MqttClient } from 'mqtt'
+import type { EpdColorDepth } from '@/api/modules/iot/actuator'
 import { Buffer } from 'buffer'
 import mqtt from 'mqtt'
+import { epdColorDepthLabels } from '@/api/modules/iot/actuator'
 import { useAppAccountStore } from '@/store/modules/app/account'
-import { EPD_PALETTE, imageDataToPanel } from '@/utils/epdImage'
+import { epdPaletteForDepth, imageDataToPanel } from '@/utils/epdImage'
 
 // ============================================================================
 // 墨水屏投图（transport = epd）
 //
 // 主要输入是「手机拍摄的照片」：选图 → 自动旋转（竖图转 90°，尽量填满横向面板）
 // → 高质量缩放 → 白平衡 / 色调映射 / 动态范围压缩 → OKLab 匹配 + Floyd–Steinberg
-// 抖动 → 768×552 2bpp 位图 → 经 MQTT over WSS 发布到 iot/{deviceId}/img/*，
-// 设备落盘并刷屏。
+// 抖动 → 面板尺寸 2bpp 位图 → 经 MQTT over WSS 发布到 iot/{deviceId}/img/*，
+// 设备落盘并刷屏。面板宽高与色深来自执行器 specs（width/height/color_depth）。
 //
 // 转换算法对用户完全隐藏（不出现算法名、无可选项），细节见 utils/epdImage.ts。
 //
@@ -25,14 +27,29 @@ defineOptions({ name: 'EpdImagePicker' })
 const props = withDefaults(defineProps<{
   deviceId: string
   disabled?: boolean
+  /** 显示逻辑宽度（px，来自执行器 specs.width） */
+  width?: number
+  /** 显示逻辑高度（px，来自执行器 specs.height） */
+  height?: number
+  /** 色深/配色（来自执行器 specs.color_depth） */
+  colorDepth?: string
 }>(), {
   disabled: false,
+  width: 400,
+  height: 300,
+  colorDepth: 'bwr',
 })
 
-// ── 面板位图格式（与固件 components/periph/src/drivers/epd_driver.c 一致）──
-// 768×552，2bpp BWRY，4 像素/字节，MSB first；颜色码 0=黑 1=白 2=黄 3=红
-const EPD_W = 768
-const EPD_H = 552
+// ── 面板位图格式（与固件 display 控制器适配层一致）──
+// width×height，2bpp，4 像素/字节，MSB first；颜色码 0=黑 1=白 2=黄 3=红。
+// 宽度向下对齐到 8 的倍数（后端已校验）。
+const EPD_W = Math.max(8, Math.floor(props.width / 8) * 8)
+const EPD_H = Math.max(8, Math.round(props.height))
+// rgb565/rgb888 为控制器原生帧格式，当前 2bpp 投图通道不支持
+const isRawDepth = ['rgb565', 'rgb888'].includes(props.colorDepth)
+const palette = epdPaletteForDepth(props.colorDepth)
+const colorLabel = epdColorDepthLabels[props.colorDepth as EpdColorDepth] ?? props.colorDepth
+const bitDepthLabel = isRawDepth ? props.colorDepth.toUpperCase() : '2bpp'
 const IMG_CHUNK = 4096 // 须小于固件 MQTT 收包缓冲（8192）
 
 const accountStore = useAppAccountStore()
@@ -63,7 +80,7 @@ const rotationOptions = [
 let currentImg: HTMLImageElement | null = null
 let client: MqttClient | null = null
 
-const hasImage = computed(() => packed.value !== null)
+const hasImage = computed(() => packed.value !== null && !isRawDepth)
 const mqttLabel = computed(() => {
   switch (mqttState.value) {
     case 'connected': return 'MQTT 已连接'
@@ -181,7 +198,7 @@ function loadImage(file: File): Promise<HTMLImageElement> {
   })
 }
 
-/** 面板是横向 768×552；竖图自动顺时针转 90° 以保留最多画面。 */
+/** 面板横向；竖图自动顺时针转 90° 以保留最多画面。 */
 function resolveRotation(img: HTMLImageElement): { deg: number, why: string } {
   if (rotation.value !== 'auto') {
     return { deg: Number(rotation.value), why: '手动指定' }
@@ -197,7 +214,7 @@ function resolveRotation(img: HTMLImageElement): { deg: number, why: string } {
 }
 
 /**
- * 手机照片动辄 3000~4000px，一次性大比例缩到 768px 容易走样（锯齿/摩尔纹）。
+ * 手机照片动辄 3000~4000px，一次性大比例缩到面板宽度容易走样（锯齿/摩尔纹）。
  * 先等比缩到最长边 ≤ 2048 作为中间源，最终绘制只剩 ≤2.7× 下采样。
  */
 function prescalePhoto(img: HTMLImageElement): { src: CanvasImageSource, width: number, height: number } {
@@ -219,7 +236,7 @@ function prescalePhoto(img: HTMLImageElement): { src: CanvasImageSource, width: 
   return { src: c, width: c.width, height: c.height }
 }
 
-/** 等比 cover 缩放 + 居中旋转到 768×552，返回面板尺寸的 ImageData。 */
+/** 等比 cover 缩放 + 居中旋转到面板尺寸，返回 ImageData。 */
 function imageToPanelImageData(img: HTMLImageElement, rotateDeg: number): ImageData {
   const { src, width: sw, height: sh } = prescalePhoto(img)
 
@@ -266,7 +283,7 @@ function drawPreview(idx: Uint8Array) {
   }
   const im = ctx.createImageData(EPD_W, EPD_H)
   for (let i = 0; i < idx.length; i++) {
-    const col = EPD_PALETTE[idx[i]].color
+    const col = palette[idx[i]].color
     im.data[i * 4] = col[0]
     im.data[i * 4 + 1] = col[1]
     im.data[i * 4 + 2] = col[2]
@@ -285,16 +302,16 @@ function renderFromImage(img: HTMLImageElement) {
   const rot = resolveRotation(img)
   const imageData = imageToPanelImageData(img, rot.deg)
   // 固定走「手机照片」流水线（算法对用户隐藏，不出现任何算法名）
-  const { packed: bytes, idx } = imageDataToPanel(imageData)
+  const { packed: bytes, idx } = imageDataToPanel(imageData, palette)
   packed.value = bytes
-  imageInfo.value = `${EPD_W}×${EPD_H} · 2bpp · ${bytes.length} 字节 · 旋转 ${rot.deg}°`
+  imageInfo.value = `${EPD_W}×${EPD_H} · ${bitDepthLabel} · ${colorLabel} · ${bytes.length} 字节 · 旋转 ${rot.deg}°`
   drawPreview(idx)
   pushLog(`已生成面板位图 ${bytes.length} 字节（旋转 ${rot.deg}°：${rot.why}）`)
 }
 
 // ==================== 交互 ====================
 function pickFile() {
-  if (props.disabled || sending.value) {
+  if (props.disabled || sending.value || isRawDepth) {
     return
   }
   fileInputEl.value?.click()
@@ -320,7 +337,7 @@ async function onFileChange(ev: Event) {
 
 async function sendImage() {
   const bytes = packed.value
-  if (bytes === null || sending.value || props.disabled) {
+  if (bytes === null || sending.value || props.disabled || isRawDepth) {
     return
   }
   sending.value = true
@@ -363,8 +380,8 @@ async function sendImage() {
   }
 }
 
-// 切换设备时重建话题订阅
-watch(() => props.deviceId, () => {
+// 切换设备/面板配置时重建话题订阅
+watch(() => [props.deviceId, props.width, props.height, props.colorDepth], () => {
   client?.end(true)
   client = null
   mqttState.value = 'idle'
@@ -394,7 +411,7 @@ onBeforeUnmount(() => {
 
     <!-- 选择图片 + 旋转 -->
     <div class="flex gap-2 items-center">
-      <FaButton variant="outline" size="sm" :disabled="disabled || sending" @click="pickFile">
+      <FaButton variant="outline" size="sm" :disabled="disabled || sending || isRawDepth" @click="pickFile">
         <FaIcon name="i-ri:upload-2-line" class="mr-1 size-3.5" />
         选择图片
       </FaButton>
@@ -404,23 +421,29 @@ onBeforeUnmount(() => {
 
     <!-- 显示区（布局参照 InkSight）：面板铺满宽度并居中；屏幕满宽 + 面板宽高比；图片按 contain 逻辑填满 -->
     <div class="preview-panel">
-      <div class="preview-screen">
-        <canvas ref="canvasEl" width="768" height="552" class="preview-canvas" />
+      <div class="preview-screen" :style="{ '--epd-ratio': `${EPD_W} / ${EPD_H}` }">
+        <canvas ref="canvasEl" :width="EPD_W" :height="EPD_H" class="preview-canvas" />
         <div v-if="!hasImage" class="preview-empty">
-          选择图片后在此预览 4 色效果
+          <template v-if="isRawDepth">
+            当前色深 {{ colorLabel }} 不支持 2bpp 投图
+          </template>
+          <template v-else>
+            选择图片后在此预览{{ colorLabel }}效果
+          </template>
         </div>
       </div>
     </div>
 
     <!-- 调色板图例（标定外观色，用于抖动与预览） -->
     <div class="palette-legend">
-      <span v-for="entry in EPD_PALETTE" :key="entry.name" class="legend-item">
+      <span v-for="entry in palette" :key="entry.name" class="legend-item">
         <i class="legend-swatch" :style="{ background: `rgb(${entry.color[0]}, ${entry.color[1]}, ${entry.color[2]})` }" />
         {{ entry.name }}
       </span>
     </div>
 
-    <div v-if="imageInfo" class="text-xs text-gray-400">
+    <!-- 固定占位：选图前后高度一致，避免预览区上下跳动 -->
+    <div class="text-xs text-gray-400 min-h-4">
       {{ imageInfo }}
     </div>
 
@@ -463,7 +486,10 @@ onBeforeUnmount(() => {
     </FaCollapsible>
 
     <div class="footer-hint">
-      <span>选图即本地预览；发送 768×552 2bpp 位图，经 MQTT over WSS 下发</span>
+      <span v-if="isRawDepth">
+        {{ colorLabel }} 为控制器原生帧格式，当前投图通道仅支持 BW/BWR/BWRY 的 2bpp 位图
+      </span>
+      <span v-else>选图即本地预览；发送 {{ EPD_W }}×{{ EPD_H }} 2bpp 位图，经 MQTT over WSS 下发</span>
       <span v-if="sending" class="flex gap-1 items-center">
         <FaIcon name="i-ri:loader-4-line" class="size-3 animate-spin" />
         发送中…
@@ -477,8 +503,10 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  width: 100%;
-  max-width: min(460px, 92vw);
+
+  /* 固定宽度：避免选图后 imageInfo/日志等内容把 popover 撑宽，导致预览框尺寸变化 */
+  width: min(460px, 92vw);
+  max-width: 100%;
   max-height: min(80vh, 720px);
   padding: 10px;
   margin-inline: auto;
@@ -514,25 +542,31 @@ onBeforeUnmount(() => {
   border-radius: 8px;
 }
 
-/* 屏幕「固定宽度 + 固定宽高比（= 面板位图 768:552）」：选图前后尺寸完全一致。
+/* 屏幕固定宽度 + 宽高比由内联样式按面板分辨率设置：选图前后尺寸一致。
    正常卡片宽度下恒为 400px；只有窄屏（可用宽度不足 400px）才按 100% 自适应。 */
+
+/* 预览舞台：宽度取容器比例，高度按面板分辨率比例推导，两者都不写死像素。
+   用 inset 阴影画边框，避免边框占用内容区导致位图被缩小 1px。 */
 .preview-screen {
   position: relative;
-  width: min(100%, 400px);
-  aspect-ratio: 768 / 552;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 80%;
+  aspect-ratio: var(--epd-ratio, 4 / 3);
   overflow: hidden;
   background: #fff;
-  border: 1px solid var(--el-border-color);
   border-radius: 4px;
+  box-shadow: inset 0 0 0 1px var(--el-border-color);
 }
 
-/* 图片显示逻辑同 object-contain：绝对定位铺满屏幕、保持比例居中 */
+/* 处理结果按原生像素显示：小于舞台时 1:1 居中，不拉伸；大于舞台时才等比缩小。 */
 .preview-canvas {
-  position: absolute;
-  inset: 0;
   display: block;
-  width: 100%;
-  height: 100%;
+  width: auto;
+  max-width: 100%;
+  height: auto;
+  max-height: 100%;
   image-rendering: pixelated;
 }
 

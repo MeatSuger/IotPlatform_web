@@ -433,6 +433,24 @@ function transportOf(act: Actuator): string {
   return typeof t === 'string' ? t : ''
 }
 
+// EPD 显示参数：缺省回退到固件当前面板（SSD1683 4.2" 400×300 BWR）
+function epdNumber(act: Actuator, key: string, fallback: number): number {
+  const n = Number(act.specs?.[key])
+  return Number.isFinite(n) && n > 0 ? n : fallback
+}
+
+function epdString(act: Actuator, key: string, fallback: string): string {
+  const v = act.specs?.[key]
+  return typeof v === 'string' && v !== '' ? v : fallback
+}
+
+// 卡片只展示屏幕尺寸（英寸）；像素宽高、芯片等细节留给编辑弹窗的高级选项
+function epdSize(act: Actuator): string {
+  const inch = Number(act.specs?.size_inch)
+  const value = Number.isFinite(inch) && inch > 0 ? inch : 4.2
+  return `${value % 1 === 0 ? value.toFixed(1) : value} 英寸`
+}
+
 function actuatorConfigSummary(act: Actuator): string {
   const cfg = act.specs ?? {}
   const transport = transportOf(act)
@@ -446,7 +464,7 @@ function actuatorConfigSummary(act: Actuator): string {
     return `GPIO ${cfg.gpio ?? 48}${cfg.count ? ` · ${cfg.count} 颗` : ''}`
   }
   if (transport === 'epd') {
-    return '板载 JD79665 · 768×552 四色'
+    return epdSize(act)
   }
   if (transport === 'gpio') {
     return `pin ${cfg.pin ?? '-'}${cfg.active_high === false ? ' · 低有效' : ''}`
@@ -1003,7 +1021,7 @@ onBeforeUnmount(() => {
                   <!-- epd：墨水屏投图（图片位图经 MQTT over WSS 直发设备，不走命令原语） -->
                   <template v-else-if="transportOf(act) === 'epd'">
                     <div class="flex gap-2 items-center">
-                      <FaPopover v-model="runtimeState(act).pickerOpen" align="start" class="p-0 w-[min(460px,92vw)]" :side-offset="4">
+                      <FaPopover v-model="runtimeState(act).pickerOpen" align="start" class="p-0" :side-offset="4">
                         <button
                           class="text-sm px-3 border border-black/10 rounded-md flex gap-1.5 h-8 cursor-pointer shadow-sm transition-transform items-center dark:border-white/10 disabled:opacity-60 disabled:cursor-not-allowed hover:scale-105"
                           :disabled="actuatorCmdBusy === act.id"
@@ -1016,12 +1034,15 @@ onBeforeUnmount(() => {
                         <template #panel>
                           <EpdImagePicker
                             :device-id="selectedDetail?.deviceId ?? ''"
+                            :width="epdNumber(act, 'width', 400)"
+                            :height="epdNumber(act, 'height', 300)"
+                            :color-depth="epdString(act, 'color_depth', 'bwr')"
                             :disabled="actuatorCmdBusy === act.id"
                           />
                         </template>
                       </FaPopover>
                       <FaTag variant="secondary">
-                        768×552 · 4 色
+                        {{ epdSize(act) }}
                       </FaTag>
                     </div>
                   </template>

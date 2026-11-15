@@ -1,35 +1,23 @@
 // ============================================================================
-// 手机照片 → 墨水屏四色（BWRY）位图。
+// 手机照片 → 墨水屏 2bpp 位图（BW / BWR / BWRY）。
 //
-// 面板：JD79665（华为 A1）768×552，2bpp，4 像素/字节，MSB first；
-// 颜色码 0=黑 1=白 2=黄 3=红（与固件 components/periph/src/drivers/epd_driver.c 一致）。
+// 面板尺寸与色深由调用方（执行器 specs.width/height/color_depth）决定；
+// 2bpp，4 像素/字节，MSB first；颜色码 0=黑 1=白 2=黄 3=红。
 //
-// 面板 LUT 固定、只能控制 framebuffer 的 4 色像素值，所以算法只负责决定「原图这个
-// 像素该发哪一个四色状态」，走一条针对固定 EPD 的感知量化流水线：
-//
+// 流水线：
 //   线性化 / Gamma → OKLab
 //   → 白平衡 / 色调映射 / 动态范围压缩
-//   → 亮度 + 色度加权的 OKLab 最近色（中性色软惩罚）
+//   → HyAB + 色度耦合的 OKLab 最近色（按原图色度做中性软惩罚）
 //   → Sobel 梯度边缘保护：
 //        边缘像素 → 直接最近色量化（不扩散误差，文字 / 线条保持锐利）
 //        非边缘   → Stucki 误差扩散（蛇形扫描），传播强度按区域自适应
-//   → 2bpp framebuffer（4 像素 / 字节，MSB first，与固件一致）
+//   → 2bpp framebuffer
 //
 // 算法参考：
 //  - paperlesspaper/epdoptimize —— 标定调色板、色调映射、LAB 动态范围压缩、边缘保护
-//    https://github.com/paperlesspaper/epdoptimize
 //  - ibezkrovnyi/image-quantization (image-q) —— 误差扩散核与色彩距离工程实现
 //  - Tanner Helland《Dithering – eleven algorithms》/ Stucki 核系数
-//
-// 关键取舍：
-//  - 调色板用「面板实测外观色」而不是 #FF0000/#FFFF00 原色：LUT 输出是黑盒，
-//    量化必须按实际显示色反推（device 码 0/1/2/3 不变）；
-//  - 距离用 OKLab 而不是 RGB 欧氏距离（RGB 距离不等于人眼感知距离）；
-//  - 误差扩散用 Stucki：比 Floyd–Steinberg 更平滑，四色屏上规则网纹更少；
-//  - 误差按区域自适应传播（平坦 0.8 / 渐变 0.6 / 高频 0.3 / 边缘 0）：
-//    四色数量太少，100% 传播很容易形成明显纹理；
-//  - 抖动的作用是「用四种墨水合成出很多层次」：中性区域用黑白点密度表现灰阶，
-//    彩色区域用四色混合表现中间色，高光保持纯白、暗部保持纯黑。
+//  - Byonk PITFALLS.md —— 感知空间匹配 / 物理空间扩散；HyAB + chroma coupling
 // ============================================================================
 
 export interface EpdPaletteEntry {
@@ -40,15 +28,35 @@ export interface EpdPaletteEntry {
   device: number
 }
 
-// e-ink 是反射式显示：白偏灰、黄/红比 sRGB 原色暗。直接用 #FFFFFF/#FFFF00/#FF0000
-// 抖动会让中间调偏亮偏艳，因此这里用标定外观色（思路同 epdoptimize 的标定调色板）。
-// 有实测条件时（分色仪/色卡拍照取色）改这里即可，device 码不要动。
+// e-ink 是反射式显示：白偏灰、黄/红比 sRGB 原色暗。用标定外观色而非原色。
+// 有实测条件时改 color 即可，device 码不要动。
 export const EPD_PALETTE: EpdPaletteEntry[] = [
-  { name: 'black', color: [0x14, 0x14, 0x14], device: 0 },
-  { name: 'white', color: [0xF2, 0xF2, 0xEE], device: 1 },
-  { name: 'yellow', color: [0xEA, 0xCC, 0x1C], device: 2 },
-  { name: 'red', color: [0xC2, 0x2A, 0x26], device: 3 },
+  { name: 'black', color: [34, 35, 36], device: 0 },
+  { name: 'white', color: [218, 218, 214], device: 1 },
+  { name: 'yellow', color: [197, 148, 39], device: 2 },
+  { name: 'red', color: [143, 40, 41], device: 3 },
 ]
+
+/** 2bpp 运输格式下各色深可用的调色板（device 码固定，不随子集变化）。 */
+export const EPD_PALETTES: Record<'bw' | 'bwr' | 'bwry', EpdPaletteEntry[]> = {
+  bw: [EPD_PALETTE[0], EPD_PALETTE[1]],
+  bwr: [EPD_PALETTE[0], EPD_PALETTE[1], EPD_PALETTE[3]],
+  bwry: EPD_PALETTE,
+}
+
+/** 按执行器 specs.color_depth 取 2bpp 调色板；rgb565/rgb888 不走本流水线。 */
+export function epdPaletteForDepth(colorDepth?: string): EpdPaletteEntry[] {
+  switch (colorDepth) {
+    case 'bw':
+      return EPD_PALETTES.bw
+    case 'bwr':
+      return EPD_PALETTES.bwr
+    case 'bwry':
+      return EPD_PALETTES.bwry
+    default:
+      return EPD_PALETTE
+  }
+}
 
 export interface ConvertResult {
   /** 2bpp 打包位图（可直接作为设备位图载荷） */
@@ -60,55 +68,42 @@ export interface ConvertResult {
 }
 
 // ============================================================================
-// 手机照片专用参数
+// 参数
 // ============================================================================
 
-/**
- * 手机照片通常略平、色偏；墨水屏是反射式、对比与饱和都弱。
- * 因此整体提对比 + 提饱和，让颜色尽量落到红/黄/黑/白四色上，
- * 而不是被抖动成一片灰。
- */
 const PHOTO = {
-  /** 曝光（档）：手机测光偏保守，轻微提亮 0.03EV */
   exposure: 0.03,
-  /** 饱和度：1.30（四色屏需要更强的色彩决断力） */
-  saturation: 1.3,
-  /** 对比度：1.10 */
-  contrast: 1.1,
-  /** S 曲线强度：0.30（压暗部、提亮部，照片更"通透"） */
+  saturation: 1.05,
+  contrast: 1.05,
   scurve: 0.3,
-  /** 高光保护：亮度 ≥ p98.5 且低饱和的像素（白墙/天空/纸）保持纯白 */
   whitePreservePercentile: 0.985,
   whitePreserveMaxChroma: 0.12,
-  /** 白平衡强度 0..1（灰世界） */
   whiteBalanceStrength: 0.5,
 }
 
 /**
- * 中性色保护：源像素 OKLab chroma 低于此值时，对有彩色调色板项施加惩罚。
- * BWRY 四色缺中性中间调，红/黄的亮度恰好落在中灰附近，不做限制时中灰会被
- * 匹配到红（整片发红）。惩罚是「软」的：纯灰稳定落在黑/白，而皮肤、米色这类
- * 弱彩度仍能保留颜色 —— 抖动因此能表现出更多层次（颜色深度）。
+ * 中性色保护：源像素 OKLab chroma 低于此值时，对有彩色调色板项施加软惩罚。
+ * BWRY 缺中性中间调，红/黄的亮度恰在中灰附近，不做限制时中灰会整片发红。
+ * 判定必须用「原图色度」，不能用误差累积后的值，否则惩罚会逐像素失效。
  */
 const NEUTRAL_SOURCE_CHROMA = 0.04
-/** 调色板项 OKLab chroma 高于此值视为有彩色（参与中性惩罚）。 */
 const CHROMATIC_PALETTE_CHROMA = 0.05
-/** 最中性像素对有彩色项的惩罚（OKLab 距离平方），需大于「中灰到红」与「中灰到黑/白」的差。 */
-const NEUTRAL_CHROMA_PENALTY = 0.18
+/** HyAB 量纲下的中性惩罚，可调 0.03–0.10。 */
+const NEUTRAL_CHROMA_PENALTY = 0.06
 
-/**
- * 距离权重：OKLab 的亮度分量略微加权。
- * 四色屏最容易糊掉的是中间调，稍微偏向亮度可以保住明暗层次。
- */
+/** HyAB 权重：亮度项略微加权，保住四色屏最易糊的中间调明暗层次。 */
 const DIST_W_LUMA = 1.1
 const DIST_W_CHROMA = 1.0
 
-/** 边缘阈值（Sobel 幅值，已按 /4 归一化，黑白硬边约 1.0）：超过视为文字 / 线条边缘。 */
+/** 边缘阈值（Sobel 幅值 /4 归一化，黑白硬边约 1.0）。 */
 const EDGE_GRADIENT = 0.8
-/** 自适应误差传播强度：平坦 / 渐变 / 高频（边缘为 0，不传播）。 */
+/** 自适应误差传播强度：平坦 / 渐变 / 高频（边缘为 0）。 */
 const PROP_FLAT = 0.8
 const PROP_MID = 0.6
 const PROP_HIGH = 0.3
+
+/** 误差钳制（线性光空间 0..1）：防止色域外反复弹跳产生彩色散斑。 */
+const ERROR_CLAMP = 0.12
 
 // ============================================================================
 // 颜色空间
@@ -140,10 +135,9 @@ function linearRgbToOklab(r: number, g: number, b: number): [number, number, num
 }
 
 // ============================================================================
-// 预处理：白平衡 → 色调映射 → 动态范围压缩（原地操作 sRGB 0..1 数组）
+// 预处理：白平衡 → 色调映射 → 动态范围压缩
 // ============================================================================
 
-/** 轻度灰世界白平衡：把三通道均值拉向共同均值，消除室内灯光偏色。 */
 function applyWhiteBalance(rgb: Float32Array): void {
   const pixels = rgb.length / 3
   let sr = 0
@@ -173,7 +167,6 @@ function applyWhiteBalance(rgb: Float32Array): void {
   }
 }
 
-/** 曝光 → 饱和度 → 对比度 → S 曲线。 */
 function applyToneMapping(rgb: Float32Array): void {
   const exp = 2 ** PHOTO.exposure
   for (let i = 0; i < rgb.length; i += 3) {
@@ -201,7 +194,6 @@ function applyToneMapping(rgb: Float32Array): void {
   }
 }
 
-/** 直方图百分位（0..1）。 */
 function percentileFromHistogram(hist: Uint32Array, total: number, frac: number): number {
   const target = Math.max(1, Math.floor(total * frac))
   let acc = 0
@@ -214,11 +206,8 @@ function percentileFromHistogram(hist: Uint32Array, total: number, frac: number)
   return 1
 }
 
-/**
- * 动态范围压缩：按亮度百分位把画面铺满 [0,1]（保持色相的比例增益），
- * 并把接近最亮的低饱和像素（白墙/天空/纸）钉回纯白，避免高光被压灰。
- */
-function applyDynamicRange(rgb: Float32Array): void {
+// 当前主流程默认关闭（见 imageDataToPanel），保留导出供调参时启用。
+export function applyDynamicRange(rgb: Float32Array): void {
   const pixels = rgb.length / 3
   const hist = new Uint32Array(256)
   const lum = new Float32Array(pixels)
@@ -231,7 +220,7 @@ function applyDynamicRange(rgb: Float32Array): void {
   const lo = percentileFromHistogram(hist, pixels, 0.01)
   const hi = percentileFromHistogram(hist, pixels, 0.99)
   if (hi - lo < 1 / 32) {
-    return // 近似纯色或已满量程，无需压缩
+    return
   }
   const scale = 1 / (hi - lo)
   const whiteCut = percentileFromHistogram(hist, pixels, PHOTO.whitePreservePercentile)
@@ -275,7 +264,7 @@ interface KernelTap {
 }
 
 /**
- * Stucki 核（比 Floyd–Steinberg 更平滑，四色 EPD 上规则网纹更少）：
+ * Stucki 核：
  *         X   8   4
  *   2   4   8   4   2
  *   1   2   4   2   1   /42
@@ -295,12 +284,6 @@ const STUCKI_KERNEL: KernelTap[] = [
   { dx: 2, dy: 2, w: 1 / 42 },
 ]
 
-/**
- * Sobel 梯度幅值图（在色调映射后的亮度上算），用于：
- *   1) 边缘保护 —— 强边缘直接量化、不扩散误差（文字 / 线条 / 图标保持锐利）；
- *   2) 自适应传播 —— 平坦区域多传、高频区域少传，避免四色屏出现规则网纹。
- * 幅值按 /4 归一化，黑白硬边约为 1.0。
- */
 function computeGradient(rgb: Float32Array, w: number, h: number): Float32Array {
   const lum = new Float32Array(w * h)
   for (let i = 0, p = 0; i < w * h; i++, p += 3) {
@@ -322,7 +305,55 @@ function computeGradient(rgb: Float32Array, w: number, h: number): Float32Array 
   return grad
 }
 
-/** 误差扩散（蛇形扫描，误差在线性光空间累积）。 */
+/**
+ * OKLab 最近调色板项（返回调色板下标，写出时再映射为 device 颜色码）。
+ * 距离用 HyAB：|ΔL| + sqrt(Δa²+Δb²)，再对有彩色项叠加中性软惩罚。
+ * @param srcChroma 源像素（未叠加扩散误差）的 OKLab 色度。
+ */
+function nearestPalette(
+  r: number,
+  g: number,
+  b: number,
+  srcChroma: number, // 原图未受污染的色度
+  palLab: Array<[number, number, number]>,
+  palChroma: number[],
+): number {
+  // 判断原图是否极其接近中性色（灰度）
+  const isSourceNeutral = srcChroma < 0.015 // 极低阈值，只拦截纯灰/浅灰/深灰
+
+  const [l, a, bb] = linearRgbToOklab(r, g, b)
+
+  let best = 0
+  let bestD = Infinity
+
+  for (let k = 0; k < palLab.length; k++) {
+    // 核心逻辑：如果原图是灰色，强行跳过有彩色调色板项（红 / 黄）
+    if (isSourceNeutral && palChroma[k] >= CHROMATIC_PALETTE_CHROMA) {
+      continue
+    }
+
+    const p = palLab[k]
+    const dl = Math.abs(l - p[0])
+    const da = a - p[1]
+    const db = bb - p[2]
+    let d = DIST_W_LUMA * dl + DIST_W_CHROMA * Math.sqrt(da * da + db * db)
+
+    // 原有的软惩罚保留，处理那些“带有微弱色彩但接近灰色”的像素
+    const penalty = srcChroma < NEUTRAL_SOURCE_CHROMA
+      ? (1 - srcChroma / NEUTRAL_SOURCE_CHROMA) * NEUTRAL_CHROMA_PENALTY
+      : 0
+    if (penalty > 0 && palChroma[k] >= CHROMATIC_PALETTE_CHROMA) {
+      d += penalty
+    }
+
+    if (d < bestD) {
+      bestD = d
+      best = k
+    }
+  }
+  return best
+}
+/** Stucki 蛇形扫描误差扩散（线性光空间累积，边缘保护 + 分段自适应传播）。 */
 function diffuse(
   lin: Float32Array,
   grad: Float32Array,
@@ -346,10 +377,10 @@ function diffuse(
       const r = lin[p]
       const g = lin[p + 1]
       const b = lin[p + 2]
+
       const k = nearestPalette(r, g, b, srcChroma[i], palLab, palChroma)
       idx[i] = k
 
-      // 自适应传播强度：边缘不传播（文字直通），高频弱传播（避免网纹），平坦正常传播
       const gmag = grad[i]
       let strength: number
       if (gmag >= EDGE_GRADIENT) {
@@ -368,9 +399,19 @@ function diffuse(
         continue
       }
 
-      const er = (r - palLin[k][0]) * strength
-      const eg = (g - palLin[k][1]) * strength
-      const eb = (b - palLin[k][2]) * strength
+      // 误差钳制后再按强度缩放
+      let er = r - palLin[k][0]
+      let eg = g - palLin[k][1]
+      let eb = b - palLin[k][2]
+      er = Math.max(-ERROR_CLAMP, Math.min(ERROR_CLAMP, er))
+      eg = Math.max(-ERROR_CLAMP, Math.min(ERROR_CLAMP, eg))
+      eb = Math.max(-ERROR_CLAMP, Math.min(ERROR_CLAMP, eb))
+      er *= strength
+      eg *= strength
+      eb *= strength
+      er *= strength
+      eg *= strength
+      eb *= strength
 
       for (let t = 0; t < STUCKI_KERNEL.length; t++) {
         const tap = STUCKI_KERNEL[t]
@@ -388,54 +429,14 @@ function diffuse(
   }
 }
 
-// ============================================================================
-// 调色板匹配
-// ============================================================================
-
-/**
- * OKLab 最近调色板项（返回下标 = device 颜色码）。
- *
- * @param srcChroma 源像素（未叠加扩散误差）的 OKLab 色度。
- *   中性保护必须按「原图颜色」判定而不是按误差累积后的值：否则误差扩散会把
- *   极小的色偏逐像素放大，累积色度一超过阈值惩罚就失效，中灰会整片偏黄/偏红。
- */
-function nearestPalette(
-  r: number,
-  g: number,
-  b: number,
-  srcChroma: number,
-  palLab: Array<[number, number, number]>,
-  palChroma: number[],
-): number {
-  const [l, a, bb] = linearRgbToOklab(r, g, b)
-  const penalty = srcChroma < NEUTRAL_SOURCE_CHROMA
-    ? (1 - srcChroma / NEUTRAL_SOURCE_CHROMA) * NEUTRAL_CHROMA_PENALTY
-    : 0
-
-  let best = 0
-  let bestD = Infinity
-  for (let k = 0; k < palLab.length; k++) {
-    const p = palLab[k]
-    const dl = l - p[0]
-    const da = a - p[1]
-    const db = bb - p[2]
-    let d = DIST_W_LUMA * dl * dl + DIST_W_CHROMA * (da * da + db * db)
-    if (penalty > 0 && palChroma[k] >= CHROMATIC_PALETTE_CHROMA) {
-      d += penalty
-    }
-    if (d < bestD) {
-      bestD = d
-      best = k
-    }
-  }
-  return best
-}
-
-/** 4 像素/字节，MSB first（与固件 (color << (6 - k*2)) 一致）。 */
-function pack2bpp(idx: Uint8Array): Uint8Array {
+/** 4 像素/字节，MSB first；idx 为调色板下标，写出时映射回固件 device 颜色码。 */
+function pack2bpp(idx: Uint8Array, palette: EpdPaletteEntry[]): Uint8Array {
   const out = new Uint8Array(idx.length / 4)
   for (let i = 0, p = 0; i < idx.length; i += 4, p++) {
-    out[p] = (idx[i] << 6) | (idx[i + 1] << 4) | (idx[i + 2] << 2) | idx[i + 3]
+    out[p] = ((palette[idx[i]]?.device ?? idx[i]) << 6)
+      | ((palette[idx[i + 1]]?.device ?? idx[i + 1]) << 4)
+      | ((palette[idx[i + 2]]?.device ?? idx[i + 2]) << 2)
+      | (palette[idx[i + 3]]?.device ?? idx[i + 3])
   }
   return out
 }
@@ -446,9 +447,10 @@ function pack2bpp(idx: Uint8Array): Uint8Array {
 
 /**
  * 手机照片（已缩放到 EPD 尺寸的 ImageData）→ 2bpp 设备位图。
- * @param src 面板尺寸（768×552）的 RGBA 像素
+ * @param src 面板尺寸的 RGBA 像素
+ * @param palette 面板色深对应的调色板（默认四色 BWRY）
  */
-export function imageDataToPanel(src: ImageData): ConvertResult {
+export function imageDataToPanel(src: ImageData, palette: EpdPaletteEntry[] = EPD_PALETTE): ConvertResult {
   const { width: w, height: h, data } = src
   const n = w * h
 
@@ -463,28 +465,33 @@ export function imageDataToPanel(src: ImageData): ConvertResult {
   // 2) 白平衡 → 色调映射 → 动态范围压缩
   applyWhiteBalance(rgb)
   applyToneMapping(rgb)
-  applyDynamicRange(rgb)
+  // applyDynamicRange(rgb)
 
-  // 3) 线性光（误差扩散空间）+ 源像素色度（中性保护）+ 调色板 OKLab（匹配空间）
+  // 3) 线性光 + 原图色度（中性保护按原图判定）
   const lin = new Float32Array(n * 3)
   for (let i = 0; i < n * 3; i++) {
     lin[i] = srgbToLinear(rgb[i])
   }
-  // 源像素 OKLab 色度：中性保护按原图判定，避免误差累积把色偏放大
+
   const srcChroma = new Float32Array(n)
   for (let i = 0, p = 0; i < n; i++, p += 3) {
     const lab = linearRgbToOklab(lin[p], lin[p + 1], lin[p + 2])
     srcChroma[i] = Math.hypot(lab[1], lab[2])
   }
-  // 调色板色值是 0..255，srgbToLinear 需要 0..1，必须先归一化（漏了会全部匹配到黑）
-  const palLin = EPD_PALETTE.map(e => e.color.map(v => srgbToLinear(v / 255)) as [number, number, number])
-  const palLab = palLin.map(c => linearRgbToOklab(c[0], c[1], c[2]))
+
+  // 调色板（色值 0..255 → 先归一化再线性化）
+  const palLin: Array<[number, number, number]> = palette.map(
+    e => e.color.map(v => srgbToLinear(v / 255)) as [number, number, number],
+  )
+  const palLab: Array<[number, number, number]> = palLin.map(
+    c => linearRgbToOklab(c[0], c[1], c[2]),
+  )
   const palChroma = palLab.map(p => Math.hypot(p[1], p[2]))
 
-  // 4) 梯度图（边缘保护 + 自适应传播）→ Stucki 误差扩散
+  // 4) 梯度图 + Stucki 误差扩散
   const grad = computeGradient(rgb, w, h)
   const idx = new Uint8Array(n)
   diffuse(lin, grad, srcChroma, w, h, idx, palLin, palLab, palChroma)
 
-  return { packed: pack2bpp(idx), idx, width: w, height: h }
+  return { packed: pack2bpp(idx, palette), idx, width: w, height: h }
 }

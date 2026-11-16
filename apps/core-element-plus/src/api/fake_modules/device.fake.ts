@@ -35,6 +35,10 @@ function actuatorDetail(deviceId: string) {
   }))
 }
 
+// 假数据层的设备凭证：与真实后端对齐（注册返回一次性密钥，轮换后旧 Token 失效）
+const fakeDeviceTokens = new Map<string, string>()
+const fakeDeviceSecrets = new Map<string, string>()
+
 interface DeviceRecord {
   id: number
   deviceId: string
@@ -143,6 +147,7 @@ export default defineFakeRoute([
       const body = req.body
       const now = new Date().toISOString()
       const deviceToken = faker.string.uuid()
+      const deviceSecret = faker.string.hexadecimal({ length: 64, prefix: '' })
       const deviceId = faker.string.alphanumeric({ length: 6, casing: 'lower' })
       const newDevice: DeviceRecord = {
         id: deviceList.length + 1,
@@ -163,10 +168,12 @@ export default defineFakeRoute([
       }
       deviceList.push(newDevice)
       deviceDetailMap.set(newDevice.id, newDevice)
+      fakeDeviceTokens.set(deviceId, deviceToken)
+      fakeDeviceSecrets.set(deviceId, deviceSecret)
       return {
         code: 200,
         message: '设备注册成功',
-        data: { deviceId: newDevice.deviceId, deviceToken },
+        data: { deviceId: newDevice.deviceId, deviceToken, deviceSecret },
       }
     },
   },
@@ -201,7 +208,7 @@ export default defineFakeRoute([
     },
   },
 
-  // GET /api/devices/{deviceId}/token — 获取设备 Token（复用）
+  // GET /api/devices/{deviceId}/token — 获取设备 Token（复用；真实后端需 X-Device-Secret）
   {
     url: '/devices/:deviceId/token',
     method: 'GET',
@@ -210,14 +217,33 @@ export default defineFakeRoute([
       if (!device) {
         return { code: 404, message: '设备不存在', data: null }
       }
-      const tokenMap = new Map<string, string>()
-      if (!tokenMap.has(device.deviceId)) {
-        tokenMap.set(device.deviceId, faker.string.uuid())
+      if (!fakeDeviceTokens.has(device.deviceId)) {
+        fakeDeviceTokens.set(device.deviceId, faker.string.uuid())
       }
       return {
         code: 200,
         message: 'success',
-        data: { deviceId: device.deviceId, deviceToken: tokenMap.get(device.deviceId) },
+        data: { deviceId: device.deviceId, deviceToken: fakeDeviceTokens.get(device.deviceId) },
+      }
+    },
+  },
+
+  // POST /api/devices/{deviceId}/secret — 轮换引导密钥（旧 Token 同时吊销）
+  {
+    url: '/devices/:deviceId/secret',
+    method: 'POST',
+    response: (req: ProcessedRequest) => {
+      const device = getByDeviceId(req.params.deviceId as string)
+      if (!device) {
+        return { code: 404, message: '设备不存在', data: null }
+      }
+      const deviceSecret = faker.string.hexadecimal({ length: 64, prefix: '' })
+      fakeDeviceSecrets.set(device.deviceId, deviceSecret)
+      fakeDeviceTokens.delete(device.deviceId)
+      return {
+        code: 200,
+        message: 'success',
+        data: { deviceId: device.deviceId, deviceSecret },
       }
     },
   },

@@ -153,7 +153,7 @@ function formatTime(val: any): string {
 function buildParams() {
   const range = dateRange.value
   return {
-    limit: Math.max(pageSize.value * 2, 20),
+    limit: Math.min(Math.max(pageSize.value * 2, 20), 1000),
     ...(range ? { start: range[0].toISOString(), end: range[1].toISOString() } : {}),
   }
 }
@@ -163,6 +163,11 @@ let querySeq = 0
 
 async function onQuery(silent = false) {
   if (!query.deviceId) {
+    return
+  }
+  const range = dateRange.value
+  if (range && (+range[1] - +range[0]) > 31 * 24 * 3600 * 1000) {
+    useFaToast().error('查询范围过大', { description: '时间跨度最多 31 天' })
     return
   }
   const seq = ++querySeq

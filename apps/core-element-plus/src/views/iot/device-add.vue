@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { FormExpose } from '@fantastic-admin/components'
 import { toTypedSchema } from '@vee-validate/zod'
+import { ElMessageBox } from 'element-plus'
 import { ref } from 'vue'
 import * as z from 'zod'
 import { deviceApi } from '@/api/modules/iot/device'
@@ -44,6 +45,14 @@ async function onSubmit(values: typeof model.value) {
     const res: any = await deviceApi.register(values)
     if (res.code === 200) {
       useFaToast().success('设备添加成功')
+      const { deviceId, deviceSecret } = res.data ?? {}
+      if (deviceSecret) {
+        ElMessageBox.alert(
+          `设备 ID：${deviceId}\n\n引导密钥（仅显示一次，请写入固件 DEVICE_SECRET）：\n${deviceSecret}`,
+          '请保存设备密钥',
+          { confirmButtonText: '我已保存', type: 'warning' },
+        )
+      }
       onReset()
     }
     else {

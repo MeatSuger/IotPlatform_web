@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { TableColumn } from '@fantastic-admin/components'
+import { ElMessageBox } from 'element-plus'
 import { deviceApi } from '@/api/modules/iot/device'
 import DeviceEditDialog from './components/DeviceEditDialog.vue'
 
@@ -203,6 +204,30 @@ function onDel(row: DeviceRow) {
   })
 }
 
+// 轮换引导密钥：新密钥只返回一次，旧设备 Token 立即吊销，设备需重新烧录
+function onRotateSecret(row: DeviceRow) {
+  useFaModal().confirm({
+    title: '轮换设备引导密钥',
+    content: `将为「${row.deviceName || row.deviceId}」生成新密钥，旧设备 Token 立即失效，设备需重新烧录固件。确认继续？`,
+    onConfirm: async () => {
+      try {
+        const res: any = await deviceApi.rotateSecret(row.deviceId)
+        const secret = res?.data?.deviceSecret
+        await ElMessageBox.alert(
+          `设备 ID：${row.deviceId}\n\n新的引导密钥（仅显示一次，请写入固件 DEVICE_SECRET）：\n${secret || '(响应缺少 deviceSecret)'}`,
+          '请保存新密钥',
+          { confirmButtonText: '我已保存', type: 'warning' },
+        )
+        useFaToast().success('设备密钥已轮换')
+        getDataList()
+      }
+      catch (error: any) {
+        useFaToast().error('轮换失败', { description: error?.message || '请求失败' })
+      }
+    },
+  })
+}
+
 function onBatchDel() {
   const rows = batch.value.selectionDataList
   if (!rows.length) {
@@ -354,6 +379,7 @@ onActivated(() => {
               <FaDropdown
                 :items="[
                   [
+                    { label: '重置密钥', handle: () => onRotateSecret(row.original) },
                     { label: '删除', variant: 'destructive', handle: () => onDel(row.original) },
                   ],
                 ]"
@@ -395,6 +421,7 @@ onActivated(() => {
                   <FaDropdown
                     :items="[
                       [
+                        { label: '重置密钥', handle: () => onRotateSecret(device) },
                         { label: '删除', variant: 'destructive', handle: () => onDel(device) },
                       ],
                     ]"

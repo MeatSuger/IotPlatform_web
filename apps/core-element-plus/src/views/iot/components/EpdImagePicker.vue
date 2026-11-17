@@ -420,7 +420,7 @@ onBeforeUnmount(() => {
     </div>
 
     <!-- 显示区（布局参照 InkSight）：面板铺满宽度并居中；屏幕满宽 + 面板宽高比；图片按 contain 逻辑填满 -->
-    <div class="preview-panel">
+    <div class="preview-panel" @click="pickFile">
       <div class="preview-screen" :style="{ '--epd-ratio': `${EPD_W} / ${EPD_H}` }">
         <canvas ref="canvasEl" :width="EPD_W" :height="EPD_H" class="preview-canvas" />
         <div v-if="!hasImage" class="preview-empty">
@@ -471,7 +471,7 @@ onBeforeUnmount(() => {
       <template #trigger="{ open }">
         <span class="log-trigger">
           <FaIcon :name="open ? 'i-ri:arrow-down-s-line' : 'i-ri:arrow-right-s-line'" class="size-4" />
-          <span>回执日志</span>
+          <span>日志</span>
           <span v-if="logLines.length" class="text-gray-400">（{{ logLines.length }}）</span>
         </span>
       </template>
@@ -489,7 +489,6 @@ onBeforeUnmount(() => {
       <span v-if="isRawDepth">
         {{ colorLabel }} 为控制器原生帧格式，当前投图通道仅支持 BW/BWR/BWRY 的 2bpp 位图
       </span>
-      <span v-else>选图即本地预览；发送 {{ EPD_W }}×{{ EPD_H }} 2bpp 位图，经 MQTT over WSS 下发</span>
       <span v-if="sending" class="flex gap-1 items-center">
         <FaIcon name="i-ri:loader-4-line" class="size-3 animate-spin" />
         发送中…

@@ -17,6 +17,9 @@ import { epdPaletteForDepth, imageDataToPanel } from '@/utils/epdImage'
 //
 // 转换算法对用户完全隐藏（不出现算法名、无可选项），细节见 utils/epdImage.ts。
 //
+// mode="text" 时同一个组件负责「投文字」：浏览器用 Canvas 排版（拉丁字符 JetBrains Mono，
+// 中文回退微软雅黑）→ 阈值二值化 → 与投图完全相同的 2bpp 位图通道发到设备。
+//
 // 与 Hwawei-epd test.html 的差异：走平台 MQTT 网关（用户 Token 鉴权，不会顶掉设备
 // 连接，见 back API.md §6.3）；只保留 MQTT 通道（P2P DataChannel 未移植）；
 // UI 用框架内建 Fa* 组件。
@@ -33,8 +36,11 @@ const props = withDefaults(defineProps<{
   height?: number
   /** 色深/配色（来自执行器 specs.color_depth） */
   colorDepth?: string
+  /** image：投图片；text：投文字 */
+  mode?: 'image' | 'text'
 }>(), {
   disabled: false,
+  mode: 'image',
   width: 400,
   height: 300,
   colorDepth: 'bwr',
@@ -67,6 +73,25 @@ const rotation = ref('auto')
 const logLines = ref<string[]>([])
 // 回执日志默认收起（可选项），需要排查时再展开
 const showLog = ref(false)
+
+// 文字与面板边缘的最小间距（像素），避免笔画贴边被面框遮挡
+const TEXT_PAD = 4
+
+// ── 投文字（mode=text）──
+const textValue = ref('')
+const fontSize = ref(32)
+const alignValue = ref('center-middle')
+const alignOptions = [
+  { label: '左上', value: 'left-top' },
+  { label: '上中', value: 'center-top' },
+  { label: '右上', value: 'right-top' },
+  { label: '左中', value: 'left-middle' },
+  { label: '居中', value: 'center-middle' },
+  { label: '右中', value: 'right-middle' },
+  { label: '左下', value: 'left-bottom' },
+  { label: '下中', value: 'center-bottom' },
+  { label: '右下', value: 'right-bottom' },
+]
 
 const rotationOptions = [
   { label: '自动（竖图转 90°）', value: 'auto' },
@@ -309,9 +334,84 @@ function renderFromImage(img: HTMLImageElement) {
   pushLog(`已生成面板位图 ${bytes.length} 字节（旋转 ${rot.deg}°：${rot.why}）`)
 }
 
+// ==================== 文字 → 面板位图 ====================
+/** 中文逐字、英文按词切分，按面板宽度贪心折行 */
+function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string[] {
+  const lines: string[] = []
+  for (const para of text.split('\n')) {
+    let line = ''
+    for (const token of para.match(/[\u4E00-\u9FFF]|[^\s\u4E00-\u9FFF]+|\s+/g) ?? []) {
+      if (line !== '' && ctx.measureText(line + token).width > maxWidth) {
+        lines.push(line)
+        line = token.trimStart()
+      }
+      else {
+        line += token
+      }
+    }
+    lines.push(line)
+  }
+  return lines
+}
+
+function clampFontSize() {
+  return Math.min(EPD_H, Math.max(8, Math.round(fontSize.value)))
+}
+
+function renderText() {
+  const c = document.createElement('canvas')
+  c.width = EPD_W
+  c.height = EPD_H
+  const ctx = c.getContext('2d', { willReadFrequently: true })
+  if (ctx === null) {
+    return
+  }
+  ctx.fillStyle = '#ffffff'
+  ctx.fillRect(0, 0, EPD_W, EPD_H)
+
+  // shortcut: 1× 直接排版，不做超采样；阈值二值化后笔画锐利、不会出现灰阶抖动毛刺
+  const size = clampFontSize()
+  ctx.fillStyle = '#000000'
+  ctx.textBaseline = 'top'
+  // 拉丁字符取 JetBrains Mono，缺失的字形（中文）由浏览器回退到微软雅黑
+  ctx.font = `${size}px "JetBrains Mono", "Microsoft YaHei", "Microsoft YaHei UI", monospace`
+  const lines = wrapText(ctx, textValue.value, EPD_W - TEXT_PAD * 2)
+  const lineH = Math.round(size * 1.35)
+  const [hAlign, vAlign] = alignValue.value.split('-')
+  ctx.textAlign = hAlign === 'left' ? 'left' : hAlign === 'right' ? 'right' : 'center'
+  const x = hAlign === 'left' ? TEXT_PAD : hAlign === 'right' ? EPD_W - TEXT_PAD : EPD_W / 2
+  const blockH = lines.length * lineH
+  const y = vAlign === 'top' ? TEXT_PAD : vAlign === 'bottom' ? EPD_H - TEXT_PAD - blockH : (EPD_H - blockH) / 2
+  lines.forEach((line, i) => ctx.fillText(line, x, y + i * lineH))
+
+  const imageData = ctx.getImageData(0, 0, EPD_W, EPD_H)
+  const px = imageData.data
+  for (let i = 0; i < px.length; i += 4) {
+    const v = px[i] * 0.299 + px[i + 1] * 0.587 + px[i + 2] * 0.114 < 128 ? 0 : 255
+    px[i] = v
+    px[i + 1] = v
+    px[i + 2] = v
+    px[i + 3] = 255
+  }
+  const { packed: bytes, idx } = imageDataToPanel(imageData, palette)
+  packed.value = bytes
+  imageInfo.value = `${EPD_W}×${EPD_H} · ${size}px · ${bytes.length} 字节`
+  drawPreview(idx)
+}
+
+// 文字/字号/位置变化 → 重新生成预览位图；清空文字则回到空白态
+watch([textValue, fontSize, alignValue], () => {
+  if (textValue.value.trim() === '') {
+    packed.value = null
+    imageInfo.value = ''
+    return
+  }
+  renderText()
+})
+
 // ==================== 交互 ====================
 function pickFile() {
-  if (props.disabled || sending.value || isRawDepth) {
+  if (props.mode !== 'image' || props.disabled || sending.value || isRawDepth) {
     return
   }
   fileInputEl.value?.click()
@@ -353,7 +453,7 @@ async function sendImage() {
 
     c.publish(topicCtl.value, JSON.stringify({
       type: 'img_start',
-      name: fileName.value || 'image',
+      name: fileName.value || (props.mode === 'text' ? 'text' : 'image'),
       size: bytes.length,
       kind: 'epd2bpp',
     }))
@@ -401,16 +501,16 @@ onBeforeUnmount(() => {
     <!-- 头部：标题 + MQTT 状态 -->
     <div class="header">
       <div class="title">
-        <FaIcon name="i-ri:image-line" class="size-4" />
-        <span>墨水屏投图</span>
+        <FaIcon :name="mode === 'text' ? 'i-ri:text' : 'i-ri:image-line'" class="size-4" />
+        <span>{{ mode === 'text' ? '墨水屏投文字' : '墨水屏投图' }}</span>
         <FaTag :variant="mqttState === 'connected' ? 'default' : 'secondary'">
           {{ mqttLabel }}
         </FaTag>
       </div>
     </div>
 
-    <!-- 选择图片 + 旋转 -->
-    <div class="flex gap-2 items-center">
+    <!-- 选择图片 + 旋转（投图） -->
+    <div v-if="mode === 'image'" class="flex gap-2 items-center">
       <FaButton variant="outline" size="sm" :disabled="disabled || sending || isRawDepth" @click="pickFile">
         <FaIcon name="i-ri:upload-2-line" class="mr-1 size-3.5" />
         选择图片
@@ -419,6 +519,18 @@ onBeforeUnmount(() => {
       <FaSelect v-model="rotation" :options="rotationOptions" :disabled="disabled || sending" class="flex-1" />
     </div>
 
+    <!-- 文字 / 字号 / 位置（投文字） -->
+    <template v-else>
+      <FaTextarea v-model="textValue" :rows="3" placeholder="要显示的文字，支持换行" :disabled="disabled || sending" />
+      <div class="flex gap-2 items-center">
+        <FaNumberField
+          v-model="fontSize" :min="8" :max="EPD_H" :step="2"
+          :disabled="disabled || sending" class="flex-1 w-auto"
+        />
+        <FaSelect v-model="alignValue" :options="alignOptions" :disabled="disabled || sending" class="flex-1" />
+      </div>
+    </template>
+
     <!-- 显示区（布局参照 InkSight）：面板铺满宽度并居中；屏幕满宽 + 面板宽高比；图片按 contain 逻辑填满 -->
     <div class="preview-panel" @click="pickFile">
       <div class="preview-screen" :style="{ '--epd-ratio': `${EPD_W} / ${EPD_H}` }">
@@ -426,6 +538,9 @@ onBeforeUnmount(() => {
         <div v-if="!hasImage" class="preview-empty">
           <template v-if="isRawDepth">
             当前色深 {{ colorLabel }} 不支持 2bpp 投图
+          </template>
+          <template v-else-if="mode === 'text'">
+            输入文字后在此预览{{ colorLabel }}效果
           </template>
           <template v-else>
             选择图片后在此预览{{ colorLabel }}效果
@@ -535,7 +650,7 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   width: 100%;
-  padding: 8px;
+  overflow: hidden;
   background: var(--el-fill-color-light);
   border: 1px solid var(--el-border-color);
   border-radius: 8px;
@@ -551,19 +666,17 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 80%;
+  width: 100%;
   aspect-ratio: var(--epd-ratio, 4 / 3);
   overflow: hidden;
   background: #fff;
-  border-radius: 4px;
   box-shadow: inset 0 0 0 1px var(--el-border-color);
 }
 
 /* 处理结果按原生像素显示：小于舞台时 1:1 居中，不拉伸；大于舞台时才等比缩小。 */
 .preview-canvas {
   display: block;
-  width: auto;
-  max-width: 100%;
+  width: 100%;
   height: auto;
   max-height: 100%;
   image-rendering: pixelated;

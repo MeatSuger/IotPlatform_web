@@ -326,6 +326,7 @@ function runtimeState(act: Actuator): Record<string, any> {
     txText: '',
     txArray: '',
     pickerOpen: false,
+    textOpen: false,
   })
 }
 
@@ -650,9 +651,11 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
+  <!-- 占满内容区：框架的 .main 高度由布局 flex 决定，页面内百分比高度解析不到；
+       .main 已是 position: relative，绝对定位铺满即可在任意视口下填满，且不产生页面滚动 -->
   <FaPageMain
-    class="!m-0 border-0! rounded-none! h-full! overflow-hidden!"
-    main-class="flex flex-col overflow-hidden! p-4"
+    class="!m-0 border-0! rounded-none! inset-0! absolute! overflow-hidden!"
+    main-class="flex flex-1 flex-col min-h-0 overflow-hidden! p-4"
   >
     <!-- ==================== 列表视图 ==================== -->
     <template v-if="viewMode === 'list' && !enteringDetail">
@@ -1036,7 +1039,7 @@ onBeforeUnmount(() => {
                     </div>
                   </template>
 
-                  <!-- epd：墨水屏投图（图片位图经 MQTT over WSS 直发设备，不走命令原语） -->
+                  <!-- epd：墨水屏投图 / 投文字（图片或文字位图经 MQTT over WSS 直发设备，不走命令原语） -->
                   <template v-else-if="transportOf(act) === 'epd'">
                     <div class="flex gap-2 items-center">
                       <FaPopover v-model="runtimeState(act).pickerOpen" align="start" class="p-0" :side-offset="4">
@@ -1053,6 +1056,29 @@ onBeforeUnmount(() => {
                         </FaButton>
                         <template #panel>
                           <EpdImagePicker
+                            :device-id="selectedDetail?.deviceId ?? ''"
+                            :width="epdNumber(act, 'width', 400)"
+                            :height="epdNumber(act, 'height', 300)"
+                            :color-depth="epdString(act, 'color_depth', 'bwr')"
+                            :disabled="actuatorCmdBusy === act.id"
+                          />
+                        </template>
+                      </FaPopover>
+                      <FaPopover v-model="runtimeState(act).textOpen" align="start" class="p-0" :side-offset="4">
+                        <FaButton
+                          variant="outline"
+                          size="sm"
+                          class="transition-transform hover:scale-105"
+                          :disabled="actuatorCmdBusy === act.id"
+                          title="打开投文字面板"
+                          aria-label="打开投文字面板"
+                        >
+                          <FaIcon name="i-ri:text" />
+                          投文字
+                        </FaButton>
+                        <template #panel>
+                          <EpdImagePicker
+                            mode="text"
                             :device-id="selectedDetail?.deviceId ?? ''"
                             :width="epdNumber(act, 'width', 400)"
                             :height="epdNumber(act, 'height', 300)"

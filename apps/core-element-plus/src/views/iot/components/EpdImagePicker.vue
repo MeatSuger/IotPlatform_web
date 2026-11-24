@@ -104,6 +104,8 @@ const rotationOptions = [
 // 当前已解码图片，旋转方式变化时用于重新量化预览
 let currentImg: HTMLImageElement | null = null
 let client: MqttClient | null = null
+let readyResolve: (() => void) | null = null
+let readyReject: ((e: Error) => void) | null = null
 
 const hasImage = computed(() => packed.value !== null && !isRawDepth)
 const mqttLabel = computed(() => {
@@ -135,14 +137,46 @@ function onMqttMessage(topic: string, payload: Uint8Array) {
   }
   try {
     const obj = JSON.parse(Buffer.from(payload).toString('utf8'))
+    if (obj.type === 'img_ready') {
+      readyResolve?.()
+    }
     if (obj.type === 'img_shown' || obj.type === 'img_error') {
       progress.value = ''
+    }
+    if (obj.type === 'img_error') {
+      readyReject?.(new Error(obj.reason || '设备拒绝'))
     }
     pushLog(`回执 ${obj.type}${obj.reason ? `（${obj.reason}）` : ''}${obj.bytes ? ` ${obj.bytes}B` : ''}`)
   }
   catch {
     pushLog('收到非 JSON 回执')
   }
+}
+
+/** 等设备回 img_ready（首次投图要挂载 FatFS），再开始发二进制分片。 */
+function waitReady(ms: number): Promise<void> {
+  return new Promise((resolve, reject) => {
+    let timer: ReturnType<typeof setTimeout> | null = null
+    const cleanup = () => {
+      if (timer !== null) {
+        clearTimeout(timer)
+      }
+      readyResolve = null
+      readyReject = null
+    }
+    timer = setTimeout(() => {
+      cleanup()
+      reject(new Error('等待 img_ready 超时'))
+    }, ms)
+    readyResolve = () => {
+      cleanup()
+      resolve()
+    }
+    readyReject = (e: Error) => {
+      cleanup()
+      reject(e)
+    }
+  })
 }
 
 // 连接 MQTT 网关（用户身份：?token=<用户token>，网关不会顶掉设备连接，见 back API.md §6.3）
@@ -451,12 +485,15 @@ async function sendImage() {
       throw new Error('MQTT 未连接')
     }
 
+    const ready = waitReady(5000)
     c.publish(topicCtl.value, JSON.stringify({
       type: 'img_start',
       name: fileName.value || (props.mode === 'text' ? 'text' : 'image'),
       size: bytes.length,
       kind: 'epd2bpp',
     }))
+    progress.value = '等待设备准备…'
+    await ready
 
     for (let off = 0; off < bytes.length; off += IMG_CHUNK) {
       c.publish(topicData.value, Buffer.from(bytes.subarray(off, off + IMG_CHUNK)))

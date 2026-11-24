@@ -53,6 +53,8 @@ const rawData = ref<Array<Record<string, any>>>([])
 const currentPage = ref(1)
 const pageSize = ref(20)
 const loading = ref(false)
+// 后端返回的数据延迟说明（历史数据按分钟粒度缓存，最多延迟约 1 分钟）
+const delayNotice = ref('')
 
 function onReset() {
   dateRange.value = null
@@ -180,6 +182,7 @@ async function onQuery(silent = false) {
     // axios 拦截器已解包一层，payload 在 res.data
     const list = Array.isArray(res?.data) ? res.data : []
     rawData.value = list
+    delayNotice.value = res?.meta?.notice ?? ''
     currentPage.value = 1
     startPolling()
     if (!silent) {
@@ -507,6 +510,7 @@ watch(chartOption, (option) => {
         </div>
         <template #description>
           <span class="text-xs text-gray-500">鼠标悬停图表可框选缩放，滚轮可缩放 · 时间（{{ tzInfo.offset }}）</span>
+          <span v-if="delayNotice" class="text-xs text-orange-500 ml-2">· {{ delayNotice }}</span>
         </template>
       </FaCard>
 
